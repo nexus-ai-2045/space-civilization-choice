@@ -1,0 +1,2 @@
+# space-civilization-choice
+2026年の日本から宇宙文明の選択権を追うメタ安全保障シミュレーション
