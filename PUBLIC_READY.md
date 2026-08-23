@@ -1,6 +1,6 @@
 # 公開準備記録
 
-状態: **PRIVATE／公開候補作業中／外部操作は未承認**
+状態: **PUBLIC／mainは初期commitのみ／公開設計branchは未push**
 
 このファイルは公開判断の証拠を集めるものであり、公開許可そのものではありません。
 
@@ -14,7 +14,9 @@
 
 ## 2026-08-24のローカル実測
 
-- [x] 新規PRIVATE repoとしてクリーンな初期履歴から開始
+- [x] GitHub APIと`git ls-remote`でvisibility=`PUBLIC`、default branch=`main`をread-back
+- [x] Web公開中の`main`は初期commit `5cd937a`のみで、公開設計commitは未push
+- [x] 本taskはvisibility変更を実行していない。変更主体は未確認として扱う
 - [x] MIT LICENSEあり
 - [x] README、SECURITY.md、CONTRIBUTING.md、PREFLIGHT.mdあり
 - [x] 第三者文書本体を収録せず、公式公開URLと必要最小限の要約のみ利用
@@ -39,14 +41,16 @@
 - [x] [github-ops-skills](https://github.com/nexus-ai-2045/github-ops-skills) `main@7d5c146`を正本としてCodex向け8 skillをhash照合
 - [x] local account mapへ本repoを登録し、`github-ops/account-map/v1` schema検証pass
 - [x] 最新identity probeは`READY / identity_verified`
-- [x] push / PR / visibility preflightは承認参照なしを`BLOCKED / approval_missing`として停止
+- [x] PUBLIC repoへのpush／PR／settings変更は、PRIVATE時の自動許可を無効として人間レビューへ停止
 - [x] CodeQL governance read-only監査: 現在はdocs-only・主言語なしのため`unsupported`
-- [x] branch protection／rulesetはPRIVATEの現状態ではGitHub APIが403（public化後に再設定・確認が必要）
+- [x] ruleset 0件、`main` branch protectionなしをlive APIで確認
 - [x] Actionsは有効、allowed actionsは`all`、repository設定のSHA pin必須化は未設定
+- [x] secret scanning、push protection、Dependabot security updatesは未設定
 - [ ] 公開候補commit作成後の全履歴gitleaks再検査
 - [ ] exact HEADのremote CI pass
 - [ ] exact diffの人間レビュー
-- [ ] public化後にrequired checks、CODEOWNERS review、Actions SHA pinningを設定・read-back
+- [ ] PRの実check名を取得後、required checksとforce-push／delete防止rulesetを設定・read-back
+- [ ] Actions SHA pinning、secret scanning、push protectionを設定・read-back
 - [ ] GitHubのPrivate vulnerability reporting設定確認（現在のPRIVATE repoではAPI 404）
 - [ ] 公開後のREADME、リンク、visibilityのread-back
 
@@ -61,8 +65,8 @@ CodeQLの`unsupported`は安全性の合格ではなく、現時点で解析対�
 github-ops-skillsのunit test、Codex adapter検証、対象repoを固定したlive read-only E2Eがpassし、
 L3 read-only実行保証は`READY / live_read_only_verified`です。外部writeの成功や承認は意味しません。
 
-## 公開の停止線
+## 追加公開の停止線
 
-公開前に、対象repo、実行するvisibility変更コマンド、README、LICENSE、SECURITY.md、secret scan、
-personal path scan、このファイルの結果を提示します。commit履歴と全ファイルがWebから閲覧可能に
-なることを説明し、repo固有の明示承認を得るまでvisibilityを変更しません。
+このrepoは既にPUBLICである。branch push、PR、merge、settings変更により新しくWebへ見える内容を、
+対象repo、exact HEAD、README、LICENSE、SECURITY.md、secret scan、personal path scanと共に提示する。
+repo固有の明示承認を得るまで、公開branchへのpush、merge、settings変更を行わない。

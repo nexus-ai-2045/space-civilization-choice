@@ -4,7 +4,7 @@
 
 - HEAD: `公開候補commit作成後にexact HEADを記録する`
 - 確認日時: `2026-08-24`
-- 判定: `blocked`
+- 判定: `blocked_public_repo_human_review`
 
 ## 確認済み
 
@@ -23,8 +23,8 @@
 - exact HEAD / PR diff:
 - reviewed content:
 - decision: `changes_requested`
-- 外から見えるfilesとcommit history: 公開候補commitと既存の初期commit
+- 外から見えるfilesとcommit history: 現在は既存の初期commitのみ。branch push後は公開設計commitも閲覧可能
 - review済み: 設計文書の作業版、GitHub Ops identity probe、CodeQL適格性
-- 未review: exact diff、CI、GitHub設定、公開後表示
+- 未review: README改修を含むexact diff、remote CI、ruleset、security設定
 - 残余リスク: 未来仮定の偏り、model未実装、remote CI未実測、PRIVATE中はbranch protection利用不可、公開後の第三者解釈
 - 次に承認する正確な操作: 検査後にpush / PR / visibility変更を個別提示する

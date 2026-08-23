@@ -116,7 +116,7 @@ class ProjectGoalContractTest(unittest.TestCase):
             text = readme.read_text(encoding="utf-8")
             self.assertIn("(PROJECT_GOAL.md)", text)
             readme.write_text(
-                text.replace("[`PROJECT_GOAL.md`](PROJECT_GOAL.md)", "`PROJECT_GOAL.md`"),
+                text.replace("(PROJECT_GOAL.md)", "(PROJECT_GOAL.md.broken)"),
                 encoding="utf-8",
             )
             report = MODULE.build_report(tmp_path)

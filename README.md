@@ -1,94 +1,157 @@
+<div align="center">
+
 # 宇宙文明の選択権
 
-**2026年の技術投資は、2040年の日本を宇宙秩序のどこに置くか。**
+<p><strong>2026年の技術投資は、2040年の日本にどの選択肢を残すか。</strong></p>
 
-日本の現在の宇宙政策と技術開発を出発点に、技術ツリー、産業構造、国際標準、
-人材継承が長期的にどう連鎖するかを比較する、メタ安全保障シミュレーションの公開設計です。
+日本の宇宙政策を起点に、技術・産業・標準・文化を一本の因果連鎖として比較する、
+メタ安全保障シミュレーションです。
 
-> 日本は、宇宙へ行く技術だけでなく、宇宙で自分たちの未来を選べる能力を作れているか。
+[![Status: Design](https://img.shields.io/badge/status-design-315b7d?style=flat-square)](PROJECT_GOAL.md)
+[![Core: Deterministic First](https://img.shields.io/badge/core-deterministic_first-0969da?style=flat-square)](docs/adr/0002-hybrid-deterministic-llm-simulation.md)
+[![Governance: Human Review](https://img.shields.io/badge/governance-human_review-1b7f79?style=flat-square)](PUBLIC_READY.md)
+[![License: MIT](https://img.shields.io/badge/license-MIT-57606a?style=flat-square)](LICENSE)
 
-ここでいう「文明選択権」とは、将来の日本由来社会が、他国や巨大企業の技術・制度へ
-完全従属せず、技術、統治、文化、対外関係を自ら選べる余地です。月面文明の完成を
-予定されたゴールにはせず、その可能性を残す能力を観測します。
+</div>
 
-状態は **ハッカソン応募候補／設計中／未実装／政府・主催者の公式見解ではない** です。
-
-## ガバナンス
-
-- goal ID: `space-civilization-choice-mvp-v1`
-- owner: `repository-maintainers`
-- ゴール、スコープ、非目標、完了条件の正本: [`PROJECT_GOAL.md`](PROJECT_GOAL.md)
+> [!IMPORTANT]
+> 現在はハッカソン応募候補の**公開設計版**です。実行可能なシミュレーターと結果データは
+> まだありません。政府・JAXA・主催者の公式見解でもありません。
 
 ## 目的
 
-2026年の日本で起こり得る一つの資源配分事件から、地球上の公的資金・知財・人材育成と、
-宇宙の技術基盤・標準・将来社会の自己決定を一本の因果連鎖で接続します。同じ初期状態と
-seedから三つの技術ツリーを分岐させ、「どれが正解か」ではなく「何を得て、何を失い、
-どの将来を選べなくなるか」を説明可能にします。
+### 30秒でわかる
 
-## できること
+| 起点となる事件 | 比較する選択 | 観測するもの |
+|---|---|---|
+| 2026年、日本が宇宙技術の追加重点枠を決める | 国際統合型／国内自立型／開放基盤型 | 2040年に日本が保持・喪失した選択肢 |
 
-設計上のMVPは、次の体験を提供します。
+問うのは「どの国が勝つか」ではありません。
 
-- 国際統合型、国内自立型、開放基盤型を同じ条件で比較する
-- `2026 → 2030 → 2035 → 2040` の因果をturn ID付きで追跡する
-- 物理・物質、経済・産業・組織、認知・文化・意味の層を横断して観測する
-- 事実、シナリオ仮説、モデル仮定、未知を証拠台帳で分ける
-- 単一の「文明スコア」ではなく、六つの観測軸とトレードオフを並べる
-
-現時点では文書設計のみで、実行可能なシミュレーターや結果データはありません。
-プロジェクト全体のスコープ、非目標、機械検査可能な完了条件は
-[`PROJECT_GOAL.md`](PROJECT_GOAL.md)を正本とします。
-
-## 一枚設計
-
-最初に [`docs/ONE_PAGER.md`](docs/ONE_PAGER.md) を読んでください。詳細は次に分けています。
-
-- [プロダクト仕様](docs/PRODUCT_SPEC.md)
-- [シミュレーション設計](docs/SIMULATION_DESIGN.md)
-- [アーキテクチャ](docs/ARCHITECTURE.md)
-- [UI仕様](docs/UI_SPEC.md)
-- [研究根拠台帳](docs/RESEARCH_EVIDENCE.md)
-- [セキュリティモデル](docs/SECURITY_MODEL.md)
-- [GitHub公開運用](docs/OPERATIONS.md)
-- [ロードマップ](docs/ROADMAP.md)
-- [ADR一覧](docs/adr/README.md)
+> **日本は、宇宙へ行く技術だけでなく、宇宙で未来を選び直せる能力を作れているか。**
 
 ```mermaid
 flowchart LR
-  A[2026年の追加重点枠] --> B{三つの技術ツリー}
-  B --> C[生き残る技術・企業・技能]
-  C --> D[標準・知財・供給網]
-  D --> E[日本の役割認識]
-  E --> F[参加条件・統治規範]
-  F --> G[2040年の選択可能性]
-  G -. 日本の産業・同盟・アクセスへ帰還 .-> A
+  A["2026 日本<br/>追加重点枠"] --> B{"技術ツリー"}
+
+  B --> I["国際統合型<br/>相互運用・同盟アクセス"]
+  B --> D["国内自立型<br/>供給網・技術主権"]
+  B --> O["開放基盤型<br/>標準・参加可能性"]
+
+  I --> C["企業・技能・知財"]
+  D --> C
+  O --> C
+
+  C --> S["標準・供給網・統治"]
+  S --> F["2040<br/>残った選択肢"]
+  F -. "産業・同盟・正統性へ帰還" .-> A
+
+  classDef origin fill:#eaf2f8,stroke:#315b7d,color:#0b1f33,stroke-width:2px;
+  classDef choice fill:#eef6ff,stroke:#0969da,color:#0b1f33;
+  classDef system fill:#eaf7f5,stroke:#1b7f79,color:#0b1f33;
+  classDef outcome fill:#f2f4f7,stroke:#57606a,color:#0b1f33,stroke-width:2px;
+  class A origin;
+  class B,I,D,O choice;
+  class C,S system;
+  class F outcome;
 ```
+
+## できること
+
+### 三つの選択は、三つの「正解」ではない
+
+| 分岐 | 優先する能力 | 得やすいもの | 失いやすいもの |
+|---|---|---|---|
+| **国際統合型** | 同盟・国際計画との相互運用 | 到達速度、共同利用、外交的接続 | 独自仕様、単独変更の自由 |
+| **国内自立型** | 供給網・中核技術の国内保持 | 自律性、危機耐性、技能蓄積 | 規模、速度、国際的普及 |
+| **開放基盤型** | 開放標準と参加可能性 | 生態系、多様な参入、切替余地 | 統制力、短期収益、意思決定速度 |
+
+三分岐は同じ`scenario_snapshot`、seed、model version、外生event列から実行します。
+結果を一つの文明スコアへ潰さず、何を得て、何を失い、どの未来を選べなくなったかを比べます。
+
+## メタ安全保障として何を守るか
+
+守る対象は、月面基地や単独技術ではなく、**日本が将来の制度・技術・関係を変更できる能力**です。
+
+| 観測軸 | 見るもの |
+|---|---|
+| 到達可能性 | 宇宙空間へ到達し、活動を継続できるか |
+| 技術自律性 | 中核技術と知財を自ら更新できるか |
+| 供給網耐性 | 単一障害や外部停止に耐えられるか |
+| 制度選択余地 | 標準・統治・参加条件を選び直せるか |
+| 人材継承 | 技能、教育、組織記憶が次世代へ残るか |
+| 社会的正統性 | 費用と便益が説明され、支持を保てるか |
+
+地球上の資金・知財・人材の選択が、宇宙での参加条件を変え、その結果が日本の産業・同盟・
+社会的正統性へ戻る。この往復を一つの事件として観測します。
+
+## 体験の流れ
+
+```mermaid
+flowchart LR
+  P1["1. 事実と未知を確認"] --> P2["2. 技術ツリーを選択"]
+  P2 --> P3["3. 4ラウンドを実行"]
+  P3 --> P4["4. 三分岐を比較"]
+  P4 --> P5["5. 結果から因果へ戻る"]
+
+  classDef step fill:#f6f8fa,stroke:#315b7d,color:#0b1f33;
+  class P1,P2,P3,P4,P5 step;
+```
+
+1セッションは15〜25分を想定します。事実、シナリオ仮説、モデル仮定、LLM提案、未知を
+画面上で分け、各変化をturn ID、入力、行動、規則、根拠へ遡れるようにします。
+
+## 現在地とロードマップ
+
+| Phase | 成果物 | 状態 |
+|---|---|---|
+| **0 公開設計** | ゴール、仕様、ADR、根拠台帳、安全境界 | **local review済み／remote CI待ち** |
+| **1 決定論的fixture** | 状態schema、event log、同一seed replay | 未着手 |
+| **2 三分岐比較** | 共通外生event、六観測軸、感度分析 | 未着手 |
+| **3 UI** | 分岐比較、因果trace、証拠台帳 | 未着手 |
+| **4 限定LLM** | schema検証された行動提案 | 未着手 |
+| **5 demo評価** | 人間レビュー、説明可能性eval | 未着手 |
+
+次の実装はPhase 1です。まず1 branch × 4 roundの小さなfixtureをLLMなしで再生し、
+canonical output hashが一致するところまで作ります。詳細は[ロードマップ](docs/ROADMAP.md)を参照してください。
+
+## 設計を読む
+
+| 入口 | 内容 |
+|---|---|
+| [一枚設計](docs/ONE_PAGER.md) | 事件、主体、因果連鎖 |
+| [プロジェクトゴール](PROJECT_GOAL.md) | スコープ、非目標、機械検査可能な完了条件 |
+| [プロダクト仕様](docs/PRODUCT_SPEC.md) | 利用者、体験、成功条件 |
+| [シミュレーション設計](docs/SIMULATION_DESIGN.md) | 状態、分岐、replay、証拠分類 |
+| [アーキテクチャ](docs/ARCHITECTURE.md) | 決定論的coreと限定LLMの境界 |
+| [研究根拠台帳](docs/RESEARCH_EVIDENCE.md) | 事実、仮説、未知、出典 |
+| [ADR一覧](docs/adr/README.md) | 採用した判断と見直し条件 |
 
 ## クイックスタート
 
-まだ未実装のため、設計レビューを始める手順だけを示します。
+### ローカル検査
 
-1. [`PROJECT_GOAL.md`](PROJECT_GOAL.md) で、ゴール、非目標、完了条件、外部境界を確認する。
-2. [`docs/ONE_PAGER.md`](docs/ONE_PAGER.md) で事件と因果連鎖を確認する。
-3. [`docs/SIMULATION_DESIGN.md`](docs/SIMULATION_DESIGN.md) で同一seed比較と証拠台帳を確認する。
-4. [`docs/adr/README.md`](docs/adr/README.md) で、現実起点・決定論的コア・公開境界の判断を確認する。
-5. 仮説を変更する場合は、事実・仮説・未知の分類と反証条件を更新する。
+プロダクトは未実装ですが、ゴール契約と公開境界は検査できます。
 
-ゴール契約のdriftは`python scripts/check_project_goal.py --json`で検査します。この検査の通過は
-契約の整合を示すだけで、未実装のプロダクトMVPが完成したことを意味しません。
+```powershell
+py -3.13 -m unittest discover -s tests -p "test_*.py"
+py -3.13 scripts/check_project_goal.py --json
 
-実装後のローカル実行コマンドは、動作確認できた時点でここへ追加します。未検証のコマンドは
-掲載しません。
+$ratchet = Join-Path $env:APPDATA 'Python\Python313\Scripts\ai-ratchet-gate.exe'
+& $ratchet --repo .
+```
+
+期待する状態は`contract_valid_product_incomplete`です。これは設計契約が有効であることだけを示し、
+プロダクトMVPの完成や公開許可を意味しません。
 
 ## 制約
 
-- 未来予測、政府判断、投資助言、軍事作戦計画を提供するものではない
-- 公開情報だけを入力とし、実在組織・人物の非公開意図を推測しない
-- モデル係数、エージェント選好、2040年の国際環境は現時点で未知
-- LLM出力は証拠ではなく、検証対象の提案または解釈として扱う
-- 単一のランキングで政策を自動決定しない
-- 現在の設計には実装、実行結果、ユーザー検証がない
+- 2040年、日本政府、企業、国際秩序を予言しない
+- 軍事作戦、攻撃、情報工作を最適化しない
+- 文明、国家、技術ツリーを単一総合点で序列化しない
+- 実在組織・人物の非公開意図を推測しない
+- LLMの文章を証拠または状態遷移の正本にしない
+- 人間の価値判断を自動的な政策提言へ置き換えない
 
 ## 公式情報
 
@@ -99,14 +162,16 @@ flowchart LR
 - [JAXA「有人与圧ローバー」](https://humans-in-space.jaxa.jp/biz-lab/tech/pressurized-rover/)
 - [内閣府「宇宙基本計画」](https://www8.cao.go.jp/space/plan/keikaku.html)
 
-取得日と、各主張が事実・仮説・未知のどれかは[研究根拠台帳](docs/RESEARCH_EVIDENCE.md)に記録します。
-最新要件は各公式サイトを正としてください。
+取得日と主張の分類は[研究根拠台帳](docs/RESEARCH_EVIDENCE.md)へ記録します。最新要件は各公式サイトを
+正としてください。
 
-## 権利と公開境界
+## ガバナンスと公開境界
 
-本repoには、第三者のDOCX、内部要約PDF、Discordログ、非公開リンク、応募フォーム回答、
-個人情報を収録しません。外部資料は公式公開URLへのリンクと必要最小限の要約だけを利用します。
+- goal ID: `space-civilization-choice-mvp-v1`
+- owner: `repository-maintainers`
+- 正本: [PROJECT_GOAL.md](PROJECT_GOAL.md)
+- 公開判定: [PUBLIC_READY.md](PUBLIC_READY.md)
+- セキュリティ報告: [SECURITY.md](SECURITY.md)
 
-コードとrepo独自文書は [MIT License](LICENSE) で提供します。リンク先の第三者資料には、
-それぞれの権利条件が適用されます。公開判断の証拠と停止線は
-[`PUBLIC_READY.md`](PUBLIC_READY.md) を参照してください。
+第三者の文書本体、内部資料、非公開log、応募フォーム回答、個人情報は収録しません。
+repo独自のコードと文書は[MIT License](LICENSE)で提供し、リンク先資料には各権利条件が適用されます。

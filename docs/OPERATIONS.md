@@ -24,8 +24,8 @@
 3. GitHubのdefault branchでは`secret-scan`、`goal-contract`、`ratchet (ubuntu-latest)`、
    `ratchet (windows-latest)`をrequired status checkにし、CODEOWNERS reviewを必須化する。
    workflowとcheckerを同じPRで変更できても、required contextを削除してgreen扱いにはしない。
-   現在のPRIVATE repoではGitHub APIが403を返し利用できないため、public化後に別承認で設定し、
-   read-backできるまでは「保護済み」と表現しない。
+   2026-08-24のPUBLIC read-backではruleset 0件、`main`保護なしである。PRで実check名を取得した後、
+   別承認で設定し、read-backできるまでは「保護済み」と表現しない。
 4. `ai-ratchet-gate`を通常モードで実行する。
 5. 差分と検査結果を人間が確認してからcommitする。
 
@@ -65,17 +65,19 @@
 
 - repo: `nexus-ai-2045/space-civilization-choice`
 - branch: `codex/public-ready-foundation`
-- visibility: `PRIVATE`
+- visibility: `PUBLIC`（本taskによる変更ではない。変更主体は未確認）
 - GitHub Ops probe: `status=ok`
 - remote owner、active login、credential usernameはrepo ownerと一致
 - environment token override: なし
 - GitHub Ops Core Suite: `nexus-ai-2045/github-ops-skills main@7d5c146`
 - Codex adapter: 8 skill `READY`、配布後hash mismatch 0
 - account map: schema pass、本repoとCore Suite repoだけを登録
-- write preflight: push / PR / visibilityはいずれも承認参照なしで`BLOCKED`
+- write preflight: PUBLIC repoへのpush / PR / settings変更は人間レビュー必須
 - Core Suite検証: unit test 118 pass、live read-only E2Eは`READY / live_read_only_verified`
 - CodeQL governance: docs-only・主言語なしのため`unsupported`
+- ruleset 0件、`main` branch protectionなし
+- Actions SHA pinning、secret scanning、push protectionは未設定
 - external mutation: なし
 
-実装言語が追加された時点でCodeQL適格性を再監査する。repoがpublicになった後でのみ
-`public-repo-readiness`を適用し、privateの間は`repo-preflight`と本運用gateを使う。
+実装言語が追加された時点でCodeQL適格性を再監査する。PUBLIC repoの各write前に
+`public-repo-readiness`、`repo-preflight`、本運用gateを適用する。
