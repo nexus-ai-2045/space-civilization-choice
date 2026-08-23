@@ -48,12 +48,13 @@
 - [x] secret scanningとpush protectionの有効化をread-back
 - [x] Private vulnerability reportingの有効化をread-back
 - [x] Dependabot security updatesは未設定（現在は依存manifestなし）
+- [x] 既存6基盤はURL、commit ID、契約要約だけを参照し、コード・画像・文書本文の複製なし
 - [ ] 公開候補commit作成後の全履歴gitleaks再検査
 - [ ] exact HEADのremote CI pass
 - [ ] exact diffの人間レビュー
 - [ ] PRの実check名を取得後、required checksとforce-push／delete防止rulesetを設定・read-back
 - [x] Actions SHA pinning、secret scanning、push protectionを設定・read-back
-- [ ] GitHubのPrivate vulnerability reporting設定確認（現在のPRIVATE repoではAPI 404）
+- [x] GitHubのPrivate vulnerability reporting設定をPUBLIC状態でread-back
 - [ ] 公開後のREADME、リンク、visibilityのread-back
 
 ## 検査の限界

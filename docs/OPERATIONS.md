@@ -15,6 +15,10 @@
 
 どのgateのpassも、次の外部操作を自動承認しない。
 
+既存基盤の正本、採用する契約、実行版と上流HEADの差、非採用範囲は
+[`REUSE_MAP.md`](REUSE_MAP.md)へ集約する。正本のコードをこのrepoへ複製せず、上流更新は
+drift確認と回帰検査を通してから採用する。
+
 ## 操作順序
 
 ### 1. ローカルcommit前
@@ -77,6 +81,8 @@
 - CodeQL governance: docs-only・主言語なしのため`unsupported`
 - ruleset 0件、`main` branch protectionなし
 - Actions full-length SHA pinning、secret scanning、push protection、Private vulnerability reportingは設定済み・read-back済み
+- worktree lifecycle read-only scan: `protected`、未push3 commit、cleanup実行なし
+- engineering-brain runtime: module解決不能のため設計契約のみ採用、runtime連携は保留
 - external mutation: なし
 
 実装言語が追加された時点でCodeQL適格性を再監査する。PUBLIC repoの各write前に

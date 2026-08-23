@@ -125,6 +125,7 @@ canonical output hashが一致するところまで作ります。詳細は[ロ�
 | [シミュレーション設計](docs/SIMULATION_DESIGN.md) | 状態、分岐、replay、証拠分類 |
 | [アーキテクチャ](docs/ARCHITECTURE.md) | 決定論的coreと限定LLMの境界 |
 | [研究根拠台帳](docs/RESEARCH_EVIDENCE.md) | 事実、仮説、未知、出典 |
+| [既存基盤の再利用マップ](docs/REUSE_MAP.md) | FDE、開発保証、GitHub Ops、公開gateの正本と採用境界 |
 | [ADR一覧](docs/adr/README.md) | 採用した判断と見直し条件 |
 
 ## クイックスタート
