@@ -120,6 +120,7 @@ canonical output hashが一致するところまで作ります。詳細は[ロ�
 
 | 入口 | 内容 |
 |---|---|
+| [プロジェクト正本マップ](PROJECT_SSOT.md) | repository identity、文書ごとの正本、ローカル配置との境界 |
 | [一枚設計](docs/ONE_PAGER.md) | 事件、主体、因果連鎖 |
 | [プロジェクトゴール](PROJECT_GOAL.md) | スコープ、非目標、機械検査可能な完了条件 |
 | [プロダクト仕様](docs/PRODUCT_SPEC.md) | 利用者、体験、成功条件 |
@@ -171,7 +172,8 @@ $ratchet = Join-Path $env:APPDATA 'Python\Python313\Scripts\ai-ratchet-gate.exe'
 
 - goal ID: `space-civilization-choice-mvp-v1`
 - owner: `repository-maintainers`
-- 正本: [PROJECT_GOAL.md](PROJECT_GOAL.md)
+- 正本マップ: [PROJECT_SSOT.md](PROJECT_SSOT.md)
+- product goal正本: [PROJECT_GOAL.md](PROJECT_GOAL.md)
 - 公開判定: [PUBLIC_READY.md](PUBLIC_READY.md)
 - セキュリティ報告: [SECURITY.md](SECURITY.md)
 

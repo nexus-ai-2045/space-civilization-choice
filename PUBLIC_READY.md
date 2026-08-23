@@ -28,7 +28,7 @@
 - [x] ゴール契約の必須Markdown linkとrepo内target検査pass
 - [x] GitHub Actions YAML parse pass
 - [x] `git diff HEAD --check` pass
-- [x] ゴール契約mutation testを含むunit test 16件pass
+- [x] ゴール契約mutation testを含むunit test 21件pass
 - [x] ゴール契約checkerは`contract_valid_product_incomplete`（契約有効、MVP未完成）
 - [x] `secret-scan`、`goal-contract`、2 OSの`ratchet`をexact HEADで実行するCI定義あり
 - [x] ハッカソン、片山さんコンセプトペーパー、JAXA、内閣府の公式URL到達確認

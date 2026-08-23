@@ -12,8 +12,12 @@ from typing import Any
 
 REQUIRED_FILES = (
     "PROJECT_GOAL.md",
+    "PROJECT_SSOT.md",
+    "PUBLIC_READY.md",
     "README.md",
+    "docs/ONE_PAGER.md",
     "docs/PRODUCT_SPEC.md",
+    "docs/REUSE_MAP.md",
     "docs/ROADMAP.md",
     "docs/SIMULATION_DESIGN.md",
     "docs/RESEARCH_EVIDENCE.md",
@@ -54,7 +58,16 @@ DONE_WHEN_IDS = (
 )
 
 REQUIRED_LINKS = {
-    "README.md": ("PROJECT_GOAL.md",),
+    "README.md": ("PROJECT_GOAL.md", "PROJECT_SSOT.md"),
+    "PROJECT_SSOT.md": (
+        "PROJECT_GOAL.md",
+        "docs/ONE_PAGER.md",
+        "docs/SIMULATION_DESIGN.md",
+        "docs/RESEARCH_EVIDENCE.md",
+        "docs/adr/README.md",
+        "docs/REUSE_MAP.md",
+        "PUBLIC_READY.md",
+    ),
     "docs/ROADMAP.md": ("../PROJECT_GOAL.md",),
     "docs/adr/README.md": (
         "0005-adaptive-exploratory-decision-loop.md",
@@ -99,6 +112,16 @@ ADR_SCHEMA_ROWS = {
         "rejected",
         "superseded",
     ),
+}
+
+SSOT_CANONICAL_ROWS = {
+    "product_goal": "PROJECT_GOAL.md",
+    "scenario": "docs/ONE_PAGER.md",
+    "simulation_contract": "docs/SIMULATION_DESIGN.md",
+    "research_evidence": "docs/RESEARCH_EVIDENCE.md",
+    "decisions": "docs/adr/README.md",
+    "reuse_boundary": "docs/REUSE_MAP.md",
+    "public_readiness": "PUBLIC_READY.md",
 }
 
 FRONT_MATTER_RE = re.compile(r"\A---\s*\n(?P<body>.*?)\n---\s*\n", re.DOTALL)
@@ -193,6 +216,36 @@ def _markdown_schema_rows(
         if field in rows:
             duplicates.add(field)
         rows[field] = tuple(re.findall(r"`([^`]+)`", match.group("values")))
+    return rows, duplicates, malformed_lines
+
+
+def _markdown_ssot_rows(
+    section: str,
+) -> tuple[dict[str, str], set[str], list[int]]:
+    rows: dict[str, str] = {}
+    duplicates: set[str] = set()
+    malformed_lines: list[int] = []
+    for line_number, line in enumerate(section.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        if len(cells) == 4 and cells[0] == "concern_id":
+            continue
+        if cells and all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells):
+            continue
+        match = re.fullmatch(
+            r"\|\s*`(?P<concern_id>[a-z][a-z0-9_]*)`\s*\|[^|]*\|\s*"
+            r"\[[^]]+\]\((?P<target>[^)]+)\)\s*\|[^|]*\|",
+            stripped,
+        )
+        if not match:
+            malformed_lines.append(line_number)
+            continue
+        concern_id = match.group("concern_id")
+        if concern_id in rows:
+            duplicates.add(concern_id)
+        rows[concern_id] = match.group("target")
     return rows, duplicates, malformed_lines
 
 
@@ -309,6 +362,60 @@ def build_report(repo: Path) -> dict[str, Any]:
                 field=key,
                 expected=expected,
                 actual=actual or "",
+            )
+
+    ssot_text = documents.get("PROJECT_SSOT.md", "")
+    ssot_meta = _front_matter(ssot_text)
+    for key, expected in {
+        "type": "project-ssot",
+        "status": "active",
+        "owner": OWNER,
+        "canonical_repository": "nexus-ai-2045/space-civilization-choice",
+    }.items():
+        actual = ssot_meta.get(key)
+        if actual != expected:
+            _finding(
+                findings,
+                "ssot_metadata_mismatch",
+                field=key,
+                expected=expected,
+                actual=actual or "",
+            )
+    ssot_headings = set(HEADING_RE.findall(_content(ssot_text)))
+    for heading in (
+        "正本マップ",
+        "正本ではないもの",
+        "ローカル配置境界",
+        "変更ルール",
+        "保証と限界",
+    ):
+        if heading not in ssot_headings:
+            _finding(findings, "ssot_heading_missing", value=heading)
+
+    ssot_rows, duplicate_ssot_rows, malformed_ssot_lines = _markdown_ssot_rows(
+        _section(ssot_text, "正本マップ")
+    )
+    for line_number in malformed_ssot_lines:
+        _finding(
+            findings,
+            "ssot_row_malformed",
+            section_line=str(line_number),
+        )
+    for concern_id in sorted(duplicate_ssot_rows):
+        _finding(findings, "ssot_row_duplicate", concern_id=concern_id)
+    for concern_id in sorted(set(ssot_rows) - set(SSOT_CANONICAL_ROWS)):
+        _finding(findings, "ssot_concern_unexpected", concern_id=concern_id)
+    for concern_id, expected_target in SSOT_CANONICAL_ROWS.items():
+        actual_target = ssot_rows.get(concern_id)
+        if actual_target is None:
+            _finding(findings, "ssot_concern_missing", concern_id=concern_id)
+        elif actual_target != expected_target:
+            _finding(
+                findings,
+                "ssot_target_mismatch",
+                concern_id=concern_id,
+                expected=expected_target,
+                actual=actual_target,
             )
 
     readme = _content(documents.get("README.md", ""))

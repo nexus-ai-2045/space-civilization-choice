@@ -151,6 +151,80 @@ class ProjectGoalContractTest(unittest.TestCase):
             "product_metadata_mismatch", {item["code"] for item in report["findings"]}
         )
 
+    def test_project_ssot_repository_drift_is_rejected(self) -> None:
+        report = self._mutated_report(
+            "PROJECT_SSOT.md",
+            "canonical_repository: nexus-ai-2045/space-civilization-choice",
+            "canonical_repository: somebody/parallel-copy",
+        )
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "ssot_metadata_mismatch",
+            {item["code"] for item in report["findings"]},
+        )
+
+    def test_project_ssot_canonical_link_is_required(self) -> None:
+        report = self._mutated_report(
+            "PROJECT_SSOT.md",
+            "(docs/SIMULATION_DESIGN.md)",
+            "(docs/SIMULATION_DESIGN.md.broken)",
+        )
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "missing_contract_link",
+            {item["code"] for item in report["findings"]},
+        )
+
+    def test_project_ssot_canonical_targets_cannot_be_swapped(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            tmp_path = Path(directory)
+            self._copy_contract(tmp_path)
+            path = tmp_path / "PROJECT_SSOT.md"
+            text = path.read_text(encoding="utf-8")
+            text = text.replace("(PROJECT_GOAL.md)", "(__swap__.md)", 1)
+            text = text.replace("(docs/ONE_PAGER.md)", "(PROJECT_GOAL.md)", 1)
+            text = text.replace("(__swap__.md)", "(docs/ONE_PAGER.md)", 1)
+            path.write_text(text, encoding="utf-8")
+
+            report = MODULE.build_report(tmp_path)
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "ssot_target_mismatch",
+            {item["code"] for item in report["findings"]},
+        )
+
+    def test_project_ssot_duplicate_and_unexpected_rows_are_rejected(self) -> None:
+        report = self._mutated_report(
+            "PROJECT_SSOT.md",
+            "| `product_goal` |",
+            (
+                "| `product_goal` | duplicate | [goal](PROJECT_GOAL.md) | duplicate |\n"
+                "| `unexpected` | extra | [goal](PROJECT_GOAL.md) | extra |\n"
+                "| `product_goal` |"
+            ),
+        )
+
+        codes = {item["code"] for item in report["findings"]}
+        self.assertFalse(report["contract_valid"])
+        self.assertIn("ssot_row_duplicate", codes)
+        self.assertIn("ssot_concern_unexpected", codes)
+
+    def test_project_ssot_noncanonical_row_is_rejected(self) -> None:
+        report = self._mutated_report(
+            "PROJECT_SSOT.md",
+            "| `product_goal` |",
+            "| product_goal | malformed | PROJECT_GOAL.md | missing links |\n| `product_goal` |",
+        )
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "ssot_row_malformed",
+            {item["code"] for item in report["findings"]},
+        )
+
     def test_empty_adr_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             tmp_path = Path(directory)
