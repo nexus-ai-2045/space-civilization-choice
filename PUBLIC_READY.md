@@ -44,13 +44,15 @@
 - [x] PUBLIC repoへのpush／PR／settings変更は、PRIVATE時の自動許可を無効として人間レビューへ停止
 - [x] CodeQL governance read-only監査: 現在はdocs-only・主言語なしのため`unsupported`
 - [x] ruleset 0件、`main` branch protectionなしをlive APIで確認
-- [x] Actionsは有効、allowed actionsは`all`、repository設定のSHA pin必須化は未設定
-- [x] secret scanning、push protection、Dependabot security updatesは未設定
+- [x] Actionsは有効、allowed actionsは`all`、full-length SHA pinning必須化をread-back
+- [x] secret scanningとpush protectionの有効化をread-back
+- [x] Private vulnerability reportingの有効化をread-back
+- [x] Dependabot security updatesは未設定（現在は依存manifestなし）
 - [ ] 公開候補commit作成後の全履歴gitleaks再検査
 - [ ] exact HEADのremote CI pass
 - [ ] exact diffの人間レビュー
 - [ ] PRの実check名を取得後、required checksとforce-push／delete防止rulesetを設定・read-back
-- [ ] Actions SHA pinning、secret scanning、push protectionを設定・read-back
+- [x] Actions SHA pinning、secret scanning、push protectionを設定・read-back
 - [ ] GitHubのPrivate vulnerability reporting設定確認（現在のPRIVATE repoではAPI 404）
 - [ ] 公開後のREADME、リンク、visibilityのread-back
 

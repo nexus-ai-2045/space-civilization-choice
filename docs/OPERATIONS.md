@@ -76,7 +76,7 @@
 - Core Suite検証: unit test 118 pass、live read-only E2Eは`READY / live_read_only_verified`
 - CodeQL governance: docs-only・主言語なしのため`unsupported`
 - ruleset 0件、`main` branch protectionなし
-- Actions SHA pinning、secret scanning、push protectionは未設定
+- Actions full-length SHA pinning、secret scanning、push protection、Private vulnerability reportingは設定済み・read-back済み
 - external mutation: なし
 
 実装言語が追加された時点でCodeQL適格性を再監査する。PUBLIC repoの各write前に
