@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
+
+# Editors and OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Build and local artifacts
+dist/
+build/
+coverage/
+*.log
+
+# Internal-only source materials
+*.docx
+*.pdf
+private/
+internal/
