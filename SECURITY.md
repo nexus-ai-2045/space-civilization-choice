@@ -3,8 +3,9 @@
 ## 報告方法
 
 脆弱性や機密情報の混入を発見した場合は、公開issueへ詳細を書かないでください。
-公開後にPrivate vulnerability reportingが有効ならそれを利用し、利用できない間はrepository ownerへ
-連絡してSecurity Advisoryの非公開窓口を確認してください。公開前の現時点では、同機能は未確認です。
+[Private vulnerability reporting](https://github.com/nexus-ai-2045/space-civilization-choice/security/advisories/new)
+を正式な非公開窓口として利用してください。同画面を利用できない場合だけ、repository ownerへ
+Security Advisoryの非公開連絡方法を確認してください。
 
 ## 収録しない情報
 

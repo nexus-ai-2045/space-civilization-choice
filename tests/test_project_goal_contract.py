@@ -35,6 +35,7 @@ class ProjectGoalContractTest(unittest.TestCase):
     def test_repository_goal_contract_is_valid_but_product_is_incomplete(self) -> None:
         report = MODULE.build_report(ROOT)
 
+        self.assertEqual(report["schema"], "space_civilization_project_goal_check.v3")
         self.assertTrue(report["contract_valid"], report["findings"])
         self.assertEqual(report["state"], "contract_valid_product_incomplete")
         self.assertEqual(report["goal_status"], "design")
@@ -122,7 +123,9 @@ class ProjectGoalContractTest(unittest.TestCase):
             report = MODULE.build_report(tmp_path)
 
         self.assertFalse(report["contract_valid"])
-        self.assertIn("missing_contract_link", {item["code"] for item in report["findings"]})
+        self.assertIn(
+            "missing_contract_link", {item["code"] for item in report["findings"]}
+        )
 
     def test_broken_contract_link_is_rejected(self) -> None:
         report = self._mutated_report(
@@ -132,7 +135,9 @@ class ProjectGoalContractTest(unittest.TestCase):
         )
 
         self.assertFalse(report["contract_valid"])
-        self.assertIn("missing_contract_link", {item["code"] for item in report["findings"]})
+        self.assertIn(
+            "missing_contract_link", {item["code"] for item in report["findings"]}
+        )
 
     def test_product_owner_drift_is_rejected(self) -> None:
         report = self._mutated_report(
@@ -142,20 +147,155 @@ class ProjectGoalContractTest(unittest.TestCase):
         )
 
         self.assertFalse(report["contract_valid"])
-        self.assertIn("product_metadata_mismatch", {item["code"] for item in report["findings"]})
+        self.assertIn(
+            "product_metadata_mismatch", {item["code"] for item in report["findings"]}
+        )
 
     def test_empty_adr_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             tmp_path = Path(directory)
             self._copy_contract(tmp_path)
-            (tmp_path / "docs/adr/0005-adaptive-exploratory-decision-loop.md").write_text(
-                "", encoding="utf-8"
-            )
+            (
+                tmp_path / "docs/adr/0005-adaptive-exploratory-decision-loop.md"
+            ).write_text("", encoding="utf-8")
 
             report = MODULE.build_report(tmp_path)
 
             self.assertFalse(report["contract_valid"])
-            self.assertIn("adr_metadata_mismatch", {item["code"] for item in report["findings"]})
+            self.assertIn(
+                "adr_metadata_mismatch", {item["code"] for item in report["findings"]}
+            )
+
+    def test_epistemic_schema_adr_terms_are_required(self) -> None:
+        report = self._mutated_report(
+            "docs/adr/0006-separate-epistemic-provenance-validation.md",
+            "epistemic-provenance-validation/v1",
+            "removed-schema-contract/v1",
+        )
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "adr_contract_term_missing",
+            {item["code"] for item in report["findings"]},
+        )
+
+    def test_each_epistemic_schema_row_is_required(self) -> None:
+        rows = {
+            "record_kind": (
+                "| `record_kind` | `source_claim` / `exogenous_event` / "
+                "`simulated_transition` / `action_proposal` | 何を記録しているか |"
+            ),
+            "epistemic_class": (
+                "| `epistemic_class` | `fact` / `scenario_hypothesis` / "
+                "`model_assumption` / `inference` / `unknown` | 内容をどの知識状態として扱うか |"
+            ),
+            "provenance_type": (
+                "| `provenance_type` | `official_source` / `human_input` / "
+                "`deterministic_core` / `llm` | どこから来たか |"
+            ),
+            "validation_state": (
+                "| `validation_state` | `proposed` / `accepted_for_run` / "
+                "`rejected` / `superseded` | runへ採用できる状態か |"
+            ),
+        }
+        for field, row in rows.items():
+            with self.subTest(field=field):
+                report = self._mutated_report(
+                    "docs/adr/0006-separate-epistemic-provenance-validation.md",
+                    row,
+                    f"| `removed_{field}` | `removed` | removed |",
+                )
+                self.assertFalse(report["contract_valid"])
+                self.assertIn(
+                    "adr_schema_row_missing",
+                    {item["code"] for item in report["findings"]},
+                )
+
+    def test_epistemic_schema_values_are_exact(self) -> None:
+        report = self._mutated_report(
+            "docs/adr/0006-separate-epistemic-provenance-validation.md",
+            "`fact` / `scenario_hypothesis` / `model_assumption` / `inference` / `unknown`",
+            "`fact` / `unknown`",
+        )
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "adr_schema_values_mismatch",
+            {item["code"] for item in report["findings"]},
+        )
+
+    def test_epistemic_schema_duplicate_field_is_rejected(self) -> None:
+        row = (
+            "| `validation_state` | `proposed` / `accepted_for_run` / "
+            "`rejected` / `superseded` | runへ採用できる状態か |"
+        )
+        report = self._mutated_report(
+            "docs/adr/0006-separate-epistemic-provenance-validation.md",
+            row,
+            ("| `validation_state` | `wrong` | 重複した矛盾row |\n" f"{row}"),
+        )
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "adr_schema_row_duplicate",
+            {item["code"] for item in report["findings"]},
+        )
+
+    def test_epistemic_schema_unexpected_field_is_rejected(self) -> None:
+        report = self._mutated_report(
+            "docs/adr/0006-separate-epistemic-provenance-validation.md",
+            "| `record_kind` |",
+            "| `new_axis` | `unversioned` | 未規定の第5軸 |\n| `record_kind` |",
+        )
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "adr_schema_field_unexpected",
+            {item["code"] for item in report["findings"]},
+        )
+
+    def test_epistemic_schema_noncanonical_rows_are_rejected(self) -> None:
+        rows = (
+            "| new_axis | unversioned | 未規定の第5軸 |",
+            "| validation_state | wrong | backtickなしの矛盾row |",
+        )
+        for row in rows:
+            with self.subTest(row=row):
+                report = self._mutated_report(
+                    "docs/adr/0006-separate-epistemic-provenance-validation.md",
+                    "| `record_kind` |",
+                    f"{row}\n| `record_kind` |",
+                )
+
+                self.assertFalse(report["contract_valid"])
+                self.assertIn(
+                    "adr_schema_row_malformed",
+                    {item["code"] for item in report["findings"]},
+                )
+
+    def test_epistemic_schema_human_review_gate_is_required(self) -> None:
+        report = self._mutated_report(
+            "docs/adr/0006-separate-epistemic-provenance-validation.md",
+            "## Human Review Gate",
+            "## Removed Review Gate",
+        )
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "adr_heading_missing", {item["code"] for item in report["findings"]}
+        )
+
+    def test_epistemic_schema_adr_index_link_is_required(self) -> None:
+        report = self._mutated_report(
+            "docs/adr/README.md",
+            "(0006-separate-epistemic-provenance-validation.md)",
+            "(0006-separate-epistemic-provenance-validation.md.broken)",
+        )
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "missing_contract_link", {item["code"] for item in report["findings"]}
+        )
 
 
 if __name__ == "__main__":

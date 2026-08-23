@@ -12,7 +12,7 @@
 ラウンドは`2026`、`2030`、`2035`、`2040`の4つとする。
 
 三分岐は同じ`scenario_snapshot_hash`、`seed`、`model_version`、`event_stream_hash`を共有する。
-最初の技術ツリーと、その選択から因果的に生じる行動・状態だけをbranch間で変える。
+最初の技術ツリーと、その選択を入力としてモデル規則が生成する行動・状態だけをbranch間で変える。
 
 ```text
 scenario_snapshot_id
@@ -34,19 +34,22 @@ unknowns[]
 本シミュレーションは単一未来の予測器ではなく、探索的モデリングとして運用する。
 
 1. **Observe**: review時点の公開事実、モデル仮定、未知を版管理されたsnapshotへ固定する。
-2. **Bound**: 有限の因子と離散状態を定義し、整合しない組合せを根拠付きで除外する。
+2. **Bound**: XLRM、有限の因子、離散状態、run budgetを定義し、整合しない組合せを根拠付きで除外する。
 3. **Screen**: 因子スクリーニングで、影響が小さい候補を予備選別する。
-4. **Explore**: 三分岐を同一条件で実行し、六軸、脆弱性、後悔、選択肢喪失を比較する。
+4. **Explore**: ensemble manifestを固定して三分岐を同一条件で実行し、六軸、脆弱性、後悔、選択肢喪失を比較する。
 5. **Decide**: 人間が直近の一手と切替条件を選ぶ。単一スコアで自動決定しない。
 6. **Record**: manifest、event log、model card、feedbackを追記し、旧runを上書きしない。
 7. **Replan**: 次のreview時点で観測を更新し、残りhorizonを再評価する。
 
-これはモデル予測制御（MPC）に着想を得た逐次更新型の適応計画である。数理状態方程式、目的関数、
-制約付き最適化、安定性を実装するまではMPCそのものと呼ばない。詳細は
+これはモデル予測制御（MPC）に着想を得た逐次更新型の適応計画である。予測モデル、有限horizonの
+目的、制約付き反復最適化、観測更新、最適列の先頭行動だけの適用を実装するまではMPCそのものと
+呼ばない。安定性は別の保証項目として検証する。詳細は
 [`ADR-0005`](adr/0005-adaptive-exploratory-decision-loop.md)を参照する。
 
-組合せ爆発を避けるため、出力の六観測軸を早期に一つへ圧縮しない。入力側を有限領域化し、
-因子スクリーニングの後にscenario discoveryを行う。除外した因子、理由、感度範囲はmodel cardへ残す。
+組合せ爆発を抑制する設計として、出力の六観測軸を早期に一つへ圧縮しない。入力側を有限領域化し、
+因子スクリーニングの後にscenario discoveryを行う。Phase 2着手前に`max_runs`、seed数、factor範囲、
+sampling法、interaction見落としのnegative test、停止条件をensemble manifestへ固定する。未定義の間は
+「次元の呪いを回避済み」と表現しない。除外した因子、理由、感度範囲はmodel cardへ残す。
 
 数値は事実値ではない。初期値、単位、範囲、根拠、更新式、感度をモデルカードへ記録して初めて
 利用できる。根拠のない精密な小数は使わない。
@@ -87,7 +90,7 @@ sequenceDiagram
   V->>C: 許可済み行動
   C->>C: seed付き状態遷移
   C->>L: 入力・式・差分・turn ID
-  L-->>U: 比較可能な因果記録
+  L-->>U: 比較可能なモデル内部遷移記録
 ```
 
 ## 観測軸
@@ -99,8 +102,15 @@ sequenceDiagram
 ## イベント台帳
 
 各イベントは`turn_id`、時点、主体、入力、行動、前状態、後状態、適用規則、乱数draw、
-証拠参照、分類、反実仮想リンクを持つ。分類は`fact`、`scenario_hypothesis`、
-`model_assumption`、`llm_proposal`、`unknown`のいずれかとする。
+証拠参照、反実仮想リンクを持つ。分類は一つのenumへ潰さず、次の直交fieldに分ける。
+
+- `record_kind`: `source_claim`、`exogenous_event`、`simulated_transition`、`action_proposal`
+- `epistemic_class`: `fact`、`scenario_hypothesis`、`model_assumption`、`inference`、`unknown`
+- `provenance_type`: `official_source`、`human_input`、`deterministic_core`、`llm`
+- `validation_state`: `proposed`、`accepted_for_run`、`rejected`、`superseded`
+
+LLMの提案は`record_kind=action_proposal`、`provenance_type=llm`で示し、知識状態と混同しない。
+受理・棄却は`validation_state`へ必ず記録する。詳細は[`ADR-0006`](adr/0006-separate-epistemic-provenance-validation.md)を参照する。
 
 ## 再現性
 

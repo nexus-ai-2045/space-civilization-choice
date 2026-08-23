@@ -32,8 +32,8 @@ goal_id: space-civilization-choice-mvp-v1
 - 2026年の公開情報から作る版管理された`scenario_snapshot`
 - 一つの追加重点枠と、国際統合型・国内自立型・開放基盤型の三分岐
 - `2026 → 2030 → 2035 → 2040`の四ラウンド
-- 物理・物質、経済・産業・組織、認知・文化・意味の必要十分な接続
-- 六観測軸、因果event log、研究根拠台帳、model card、run manifest
+- 物理・物質、経済・産業・組織、認知・文化・意味から、一本の連鎖を検証するMVP最小接続
+- 六観測軸、モデル内部遷移trace、研究根拠台帳、model card、run manifest
 - LLMなしで再生できる決定論的コアと、MVP後の限定的なLLM提案
 - 深い不確実性下で、単一予測ではなく脆弱性、後悔、選択肢保持を比較する方法
 
@@ -49,15 +49,18 @@ goal_id: space-civilization-choice-mvp-v1
 ## 実行契約
 
 比較runでは、`scenario_snapshot_hash`、`seed`、`model_version`、`event_stream_hash`を
-三分岐で固定する。変更できる主要因は最初に選ぶ技術ツリーと、その選択から因果的に生じる
-エージェント行動だけとする。各差分は`turn_id`、入力、行動、規則、`evidence_ref`へ遡れること。
+三分岐で固定する。変更できる主要因は最初に選ぶ技術ツリーと、その選択を入力としてモデル規則が
+生成するエージェント行動だけとする。各差分は`turn_id`、入力、行動、規則、`evidence_ref`へ遡れること。
+このtraceはモデル内部の遷移由来を示し、実世界の因果推定または因果証明を意味しない。
 
 各review時点では、確認できた現在状態を取り込み、残り期間の分岐を再評価する。これは
-モデル予測制御（Model Predictive Control; MPC）に着想を得た逐次更新型の適応計画であり、
-数理最適化、安定性、最適制御を実装するまでは「MPCを実装した」と表現しない。
+モデル予測制御（Model Predictive Control; MPC）に着想を得た逐次更新型の適応計画である。
+予測モデル、有限horizonの目的、制約付き反復最適化、観測更新、先頭行動だけの適用を実装するまでは
+「MPCを実装した」と表現しない。安定性はMPCの定義ではなく、別途検証する保証項目として扱う。
 
-組合せ爆発は、政策的意味を保った有限の因子集合、整合しない組合せの除外、因子の予備選別、
-重要な脆弱性条件の発見という順序で抑える。説明性を失う圧縮だけで次元を減らさない。
+組合せ爆発は、XLRM（外生的不確実性、政策levers、関係、評価尺度）、有限の因子集合、run budget、
+整合しない組合せの除外、因子の予備選別、重要な脆弱性条件の発見という順序で抑える。
+説明性を失う圧縮だけで次元を減らさず、budgetとsampling設計がない段階では「回避済み」と表現しない。
 
 ## 完了条件
 
@@ -69,12 +72,12 @@ goal_id: space-civilization-choice-mvp-v1
 - [ ] `GOAL-001`: 本文書、README、プロダクト仕様のゴール・非目標・ownerが矛盾しない
 - [ ] `REPLAY-001`: 同一のsnapshot hash、seed、model versionを二回実行し、canonical output hashが一致する
 - [ ] `BRANCH-001`: 三分岐が同一snapshot hash、seed、event stream hashから生成される
-- [ ] `TRACE-001`: 六軸の各deltaをturn ID、入力、行動、規則、evidence refへ遡れる
-- [ ] `CLASS-001`: 事実、シナリオ仮説、モデル仮定、LLM提案、未知の未分類件数が0になる
+- [ ] `TRACE-001`: 六軸の各deltaをturn ID、入力、行動、モデル規則、evidence refへ遡れ、実世界の因果とモデル内部遷移を区別できる
+- [ ] `CLASS-001`: 全claim／提案に`record_kind`、`epistemic_class`、`provenance_type`、`validation_state`があり、不整合な組合せが0になる
 - [ ] `MODEL-001`: 全数値係数に単位、範囲、根拠、更新式、感度、反証条件がある
-- [ ] `ROBUST-001`: 少なくとも一つの脆弱性条件と一つの選択肢喪失条件を、単一順位にせず比較できる
+- [ ] `ROBUST-001`: XLRM、performance threshold、ensemble manifest、robustness／regret定義を固定し、脆弱性条件と選択肢喪失条件をholdoutで再確認できる
 - [ ] `FEEDBACK-001`: 各評価runにowner、判定、next action、resume condition、evidenceがある
-- [ ] `HUMAN-001`: 15〜25分の比較体験と因果説明可能性を、人間レビュー記録で確認する
+- [ ] `HUMAN-001`: 15〜25分の比較体験とモデル内因果の説明可能性を、人間レビュー記録で確認する
 - [ ] `CI-001`: exact HEADでreplay、schema、trace、goal contract、security gateのCIが成功する
 - [ ] `PUBLIC-001`: 公開前レビュー後に、README、license、SECURITY、secret／個人path scan、公開read-backを確認する
 
@@ -89,7 +92,7 @@ goal_id: space-civilization-choice-mvp-v1
 
 1. **Plan**: 仮説、観測軸、許容範囲、snapshot、seed、ownerを固定する。
 2. **Do**: LLMなしのfixtureを実行し、manifest、canonical JSON、event logを保存する。
-3. **Check**: replay hash、三分岐の共通条件、因果trace、分類、感度、脆弱性を検査する。
+3. **Check**: replay hash、三分岐の共通条件、モデル内因果trace、分類、感度、脆弱性を検査する。
 4. **Act**: 失敗を文言で覆わず、model card、fixture、test、ADR、または本ゴールの該当契約へ戻す。
 
 旧runは上書きしない。feedback項目は`owner`、`next_action`、`resume_condition`、`evidence`を

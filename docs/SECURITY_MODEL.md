@@ -18,7 +18,7 @@
 | 脅威 | 対策 |
 |---|---|
 | prompt injection | 外部文書の命令と事実を分離し、LLMへ状態変更権限を与えない |
-| もっともらしい捏造 | 事実にsource IDを要求し、LLM提案を別分類にする |
+| もっともらしい捏造 | 事実にsource IDを要求し、知識状態・生成元・検証状態を直交fieldへ分ける |
 | secret混入 | `.env`等をignoreし、gitleaksと履歴scanをCI・公開前に実行する |
 | 個人情報混入 | 応募情報、連絡先、private noteを公開repoへ含めない |
 | 予算暴走 | model、最大turn、token、再試行を明示し、LLM実行をopt-inにする |

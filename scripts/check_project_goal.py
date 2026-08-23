@@ -18,6 +18,7 @@ REQUIRED_FILES = (
     "docs/SIMULATION_DESIGN.md",
     "docs/RESEARCH_EVIDENCE.md",
     "docs/adr/0005-adaptive-exploratory-decision-loop.md",
+    "docs/adr/0006-separate-epistemic-provenance-validation.md",
     "docs/adr/README.md",
 )
 
@@ -55,7 +56,49 @@ DONE_WHEN_IDS = (
 REQUIRED_LINKS = {
     "README.md": ("PROJECT_GOAL.md",),
     "docs/ROADMAP.md": ("../PROJECT_GOAL.md",),
-    "docs/adr/README.md": ("0005-adaptive-exploratory-decision-loop.md",),
+    "docs/adr/README.md": (
+        "0005-adaptive-exploratory-decision-loop.md",
+        "0006-separate-epistemic-provenance-validation.md",
+    ),
+}
+
+ADR_CONTRACTS = {
+    "docs/adr/0005-adaptive-exploratory-decision-loop.md": (
+        "XLRM",
+        "ensemble manifest",
+        "MPC",
+    ),
+    "docs/adr/0006-separate-epistemic-provenance-validation.md": (
+        "epistemic-provenance-validation/v1",
+    ),
+}
+
+ADR_SCHEMA_ROWS = {
+    "record_kind": (
+        "source_claim",
+        "exogenous_event",
+        "simulated_transition",
+        "action_proposal",
+    ),
+    "epistemic_class": (
+        "fact",
+        "scenario_hypothesis",
+        "model_assumption",
+        "inference",
+        "unknown",
+    ),
+    "provenance_type": (
+        "official_source",
+        "human_input",
+        "deterministic_core",
+        "llm",
+    ),
+    "validation_state": (
+        "proposed",
+        "accepted_for_run",
+        "rejected",
+        "superseded",
+    ),
 }
 
 FRONT_MATTER_RE = re.compile(r"\A---\s*\n(?P<body>.*?)\n---\s*\n", re.DOTALL)
@@ -89,7 +132,7 @@ def _front_matter(text: str) -> dict[str, str]:
         if not raw_line or raw_line[0].isspace() or ":" not in raw_line:
             continue
         key, value = raw_line.split(":", 1)
-        values[key.strip()] = value.strip().strip('"\'')
+        values[key.strip()] = value.strip().strip("\"'")
     return values
 
 
@@ -113,6 +156,44 @@ def _resolved_link(repo: Path, source: str, target: str) -> Path | None:
 
 def _finding(findings: list[dict[str, str]], code: str, **values: str) -> None:
     findings.append({"code": code, **values})
+
+
+def _section(text: str, heading: str) -> str:
+    match = re.search(
+        rf"^##\s+{re.escape(heading)}\s*$\n(?P<body>.*?)(?=^##\s+|\Z)",
+        _content(text),
+        re.MULTILINE | re.DOTALL,
+    )
+    return match.group("body") if match else ""
+
+
+def _markdown_schema_rows(
+    section: str,
+) -> tuple[dict[str, tuple[str, ...]], set[str], list[int]]:
+    rows: dict[str, tuple[str, ...]] = {}
+    duplicates: set[str] = set()
+    malformed_lines: list[int] = []
+    for line_number, line in enumerate(section.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        if len(cells) == 3 and cells[0] == "field":
+            continue
+        if cells and all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells):
+            continue
+        match = re.fullmatch(
+            r"\|\s*`(?P<field>[^`]+)`\s*\|(?P<values>[^|]*)\|[^|]*\|",
+            stripped,
+        )
+        if not match:
+            malformed_lines.append(line_number)
+            continue
+        field = match.group("field")
+        if field in rows:
+            duplicates.add(field)
+        rows[field] = tuple(re.findall(r"`([^`]+)`", match.group("values")))
+    return rows, duplicates, malformed_lines
 
 
 def build_report(repo: Path) -> dict[str, Any]:
@@ -247,34 +328,96 @@ def build_report(repo: Path) -> dict[str, Any]:
         if heading not in set(HEADING_RE.findall(readme)):
             _finding(findings, "readme_scope_heading_missing", value=heading)
 
-    adr = documents.get(
-        "docs/adr/0005-adaptive-exploratory-decision-loop.md", ""
+    for adr_path, required_terms in ADR_CONTRACTS.items():
+        adr = documents.get(adr_path, "")
+        adr_meta = _front_matter(adr)
+        for key, expected in {
+            "type": "adr",
+            "status": "accepted",
+            "owner": OWNER,
+        }.items():
+            actual = adr_meta.get(key)
+            if actual != expected:
+                _finding(
+                    findings,
+                    "adr_metadata_mismatch",
+                    path=adr_path,
+                    field=key,
+                    expected=expected,
+                    actual=actual or "",
+                )
+        adr_content = _content(adr)
+        adr_headings = set(HEADING_RE.findall(adr_content))
+        for heading in (
+            "Context",
+            "Decision",
+            "Allowed",
+            "Prohibited",
+            "Human Review Gate",
+            "Consequences",
+            "Review Evidence",
+            "Next Actions",
+        ):
+            if heading not in adr_headings:
+                _finding(
+                    findings,
+                    "adr_heading_missing",
+                    path=adr_path,
+                    value=heading,
+                )
+        for term in required_terms:
+            if term not in adr_content:
+                _finding(
+                    findings,
+                    "adr_contract_term_missing",
+                    path=adr_path,
+                    value=term,
+                )
+
+    schema_adr_path = "docs/adr/0006-separate-epistemic-provenance-validation.md"
+    schema_adr = documents.get(schema_adr_path, "")
+    schema_rows, duplicate_schema_fields, malformed_schema_lines = (
+        _markdown_schema_rows(_section(schema_adr, "Decision"))
     )
-    adr_meta = _front_matter(adr)
-    for key, expected in {
-        "type": "adr",
-        "status": "accepted",
-        "owner": OWNER,
-    }.items():
-        actual = adr_meta.get(key)
-        if actual != expected:
+    for line_number in malformed_schema_lines:
+        _finding(
+            findings,
+            "adr_schema_row_malformed",
+            path=schema_adr_path,
+            section_line=str(line_number),
+        )
+    for field in sorted(duplicate_schema_fields):
+        _finding(
+            findings,
+            "adr_schema_row_duplicate",
+            path=schema_adr_path,
+            field=field,
+        )
+    for field in sorted(set(schema_rows) - set(ADR_SCHEMA_ROWS)):
+        _finding(
+            findings,
+            "adr_schema_field_unexpected",
+            path=schema_adr_path,
+            field=field,
+        )
+    for field, expected_values in ADR_SCHEMA_ROWS.items():
+        actual_values = schema_rows.get(field)
+        if actual_values is None:
             _finding(
                 findings,
-                "adr_metadata_mismatch",
-                field=key,
-                expected=expected,
-                actual=actual or "",
+                "adr_schema_row_missing",
+                path=schema_adr_path,
+                field=field,
             )
-    adr_headings = set(HEADING_RE.findall(_content(adr)))
-    for heading in (
-        "Context",
-        "Decision",
-        "Consequences",
-        "Review Evidence",
-        "Next Actions",
-    ):
-        if heading not in adr_headings:
-            _finding(findings, "adr_heading_missing", value=heading)
+        elif actual_values != expected_values:
+            _finding(
+                findings,
+                "adr_schema_values_mismatch",
+                path=schema_adr_path,
+                field=field,
+                expected="|".join(expected_values),
+                actual="|".join(actual_values),
+            )
 
     for relative, required_targets in REQUIRED_LINKS.items():
         text = documents.get(relative)
@@ -308,7 +451,7 @@ def build_report(repo: Path) -> dict[str, Any]:
     else:
         state = "contract_valid_product_incomplete"
     return {
-        "schema": "space_civilization_project_goal_check.v2",
+        "schema": "space_civilization_project_goal_check.v3",
         "contract_valid": contract_valid,
         "state": state,
         "goal_status": status,

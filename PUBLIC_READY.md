@@ -23,13 +23,13 @@
 - [x] `ai-ratchet-gate` baselineは矛盾0件で固定
 - [x] trackedかつignoredの矛盾0件
 - [x] gitleaks working tree 0件
-- [x] gitleaks既存履歴 0件（既存1commitを検査）
+- [x] gitleaks全履歴 0件（anchor `9ad1a652...`までの5commitを検査）
 - [x] staged personal path・応募メール・参加者番号 0件
 - [x] ゴール契約の必須Markdown linkとrepo内target検査pass
 - [x] GitHub Actions YAML parse pass
 - [x] `git diff HEAD --check` pass
-- [x] ゴール契約mutation test 8件pass
-- [x] ゴール契約checker v2は`contract_valid_product_incomplete`（契約有効、MVP未完成）
+- [x] ゴール契約mutation testを含むunit test 16件pass
+- [x] ゴール契約checkerは`contract_valid_product_incomplete`（契約有効、MVP未完成）
 - [x] `secret-scan`、`goal-contract`、2 OSの`ratchet`をexact HEADで実行するCI定義あり
 - [x] ハッカソン、片山さんコンセプトペーパー、JAXA、内閣府の公式URL到達確認
 - [x] GitHub接続名義は`nexus-ai-2045`、repo ownerと一致
@@ -42,17 +42,19 @@
 - [x] local account mapへ本repoを登録し、`github-ops/account-map/v1` schema検証pass
 - [x] 最新identity probeは`READY / identity_verified`
 - [x] PUBLIC repoへのpush／PR／settings変更は、PRIVATE時の自動許可を無効として人間レビューへ停止
-- [x] CodeQL governance read-only監査: 現在はdocs-only・主言語なしのため`unsupported`
+- [x] CodeQL governance read-only再監査: 公開候補にはPythonがあり適格候補。live default branchは言語未検出、Default setupは`not-configured`、解析実績なし
 - [x] ruleset 0件、`main` branch protectionなしをlive APIで確認
 - [x] Actionsは有効、allowed actionsは`all`、full-length SHA pinning必須化をread-back
 - [x] secret scanningとpush protectionの有効化をread-back
 - [x] Private vulnerability reportingの有効化をread-back
 - [x] Dependabot security updatesは未設定（現在は依存manifestなし）
 - [x] 既存6基盤はURL、commit ID、契約要約だけを参照し、コード・画像・文書本文の複製なし
-- [ ] 公開候補commit作成後の全履歴gitleaks再検査
+- [x] anchor `9ad1a652...`までの全履歴gitleaks再検査
+- [ ] 指摘修正commit後のfinal exact HEADで全履歴gitleaks再検査
 - [ ] exact HEADのremote CI pass
 - [ ] exact diffの人間レビュー
 - [ ] PRの実check名を取得後、required checksとforce-push／delete防止rulesetを設定・read-back
+- [ ] Pythonを指定したCodeQL Default setupの設定previewを人間レビューし、承認後に初回解析をread-back
 - [x] Actions SHA pinning、secret scanning、push protectionを設定・read-back
 - [x] GitHubのPrivate vulnerability reporting設定をPUBLIC状態でread-back
 - [ ] 公開後のREADME、リンク、visibilityのread-back
@@ -64,7 +66,8 @@
 広く利用されていること以上の安全保証には使っていません。
 
 `github-cli-ops-guard`のpassは名義と対象の一致を示すだけで、push、PR、公開の承認ではありません。
-CodeQLの`unsupported`は安全性の合格ではなく、現時点で解析対象の実装言語がないという分類です。
+CodeQLの`not-configured`は安全性の合格ではない。公開候補にはPythonがある一方、live default branchは
+初期READMEだけのためGitHub APIの言語検出は空であり、解析実績もない。設定変更と初回解析は別承認とする。
 github-ops-skillsのunit test、Codex adapter検証、対象repoを固定したlive read-only E2Eがpassし、
 L3 read-only実行保証は`READY / live_read_only_verified`です。外部writeの成功や承認は意味しません。
 

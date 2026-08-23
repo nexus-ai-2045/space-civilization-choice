@@ -26,7 +26,8 @@ drift確認と回帰検査を通してから採用する。
 1. 対象差分だけをstageする。
 2. `git diff --cached --check`、secret scan、個人path scan、Markdown link検査を実行する。
 3. GitHubのdefault branchでは`secret-scan`、`goal-contract`、`ratchet (ubuntu-latest)`、
-   `ratchet (windows-latest)`をrequired status checkにし、CODEOWNERS reviewを必須化する。
+   `ratchet (windows-latest)`をrequired status checkにする。現在はeligible reviewerがowner本人だけなので
+   approving review／CODEOWNERS reviewを必須化しない。第二reviewer追加後に別reviewで昇格する。
    workflowとcheckerを同じPRで変更できても、required contextを削除してgreen扱いにはしない。
    2026-08-24のPUBLIC read-backではruleset 0件、`main`保護なしである。PRで実check名を取得した後、
    別承認で設定し、read-backできるまでは「保護済み」と表現しない。
@@ -37,8 +38,10 @@ drift確認と回帰検査を通してから採用する。
 
 1. `repo-preflight --intent push --base-ref origin/main`を実行する。
 2. `github-cli-ops-guard`の正式probeを実行する。
-3. GitHubからrepoが`PRIVATE`、作業branchがnon-default、remoteがfast-forward可能であることを確認する。
-4. exact HEAD、push先、公開範囲を提示して承認境界を満たす。
+3. GitHubからvisibility、default branch、remote base、fast-forward可能性をread-backする。
+   `PRIVATE`ならprivate-repo autonomyの適用条件を別途確認する。`PUBLIC`なら作業branchがnon-defaultで
+   あることに加え、exact HEAD、commit数、変更file、Webから見える内容を提示して明示承認を得る。
+4. visibility別の承認境界を満たしたことを確認する。
 5. push後、remote branch SHAをread-onlyで照合する。
 
 ### 3. Pull Request前
@@ -78,12 +81,14 @@ drift確認と回帰検査を通してから採用する。
 - account map: schema pass、本repoとCore Suite repoだけを登録
 - write preflight: PUBLIC repoへのpush / PR / settings変更は人間レビュー必須
 - Core Suite検証: unit test 118 pass、live read-only E2Eは`READY / live_read_only_verified`
-- CodeQL governance: docs-only・主言語なしのため`unsupported`
+- CodeQL governance: 公開候補はPythonを含むため適格候補。live default branchの言語検出は空、Default setupは`not-configured`、解析実績なし
 - ruleset 0件、`main` branch protectionなし
 - Actions full-length SHA pinning、secret scanning、push protection、Private vulnerability reportingは設定済み・read-back済み
-- worktree lifecycle read-only scan: `protected`、未push3 commit、cleanup実行なし
+- worktree lifecycle read-only scan: anchor `9ad1a652...`で`protected`、未push4 commit、cleanup実行なし
 - engineering-brain runtime: module解決不能のため設計契約のみ採用、runtime連携は保留
-- external mutation: なし
+- external mutation: visibility変更なし。上記security／Actions設定は同日実施済み。本修正・再監査では追加mutationなし
 
-実装言語が追加された時点でCodeQL適格性を再監査する。PUBLIC repoの各write前に
-`public-repo-readiness`、`repo-preflight`、本運用gateを適用する。
+GitHubの[setup種別ガイド](https://docs.github.com/en/code-security/concepts/code-scanning/setup-types)の
+推奨どおり、まずPythonを指定したCodeQL Default setupを候補とする。Default setupで
+必要な範囲を解析できない場合だけAdvanced setupを検討する。設定変更前に人間レビューを得る。
+PUBLIC repoの各write前に`public-repo-readiness`、`repo-preflight`、本運用gateを適用する。

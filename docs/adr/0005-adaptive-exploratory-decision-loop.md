@@ -25,8 +25,13 @@ related:
 ロバスト意思決定（Robust Decision Making）を採用する。各review時点では現在状態を観測し、
 残り期間の有限な分岐を再評価して、直近の一手と切替条件を人間が選ぶ。
 
-この反復はMPCに着想を得るが、数理状態方程式、目的関数、制約付き最適化、安定性を実装するまで
-MPCそのものとは呼ばず、「逐次更新型の適応計画」と表現する。
+この反復はMPCに着想を得るが、予測モデル、有限horizonの目的、制約付き反復最適化、観測更新、
+最適列の先頭行動だけの適用を実装するまでMPCそのものとは呼ばず、「逐次更新型の適応計画」と
+表現する。安定性はMPCの定義ではなく、別途検証する保証項目とする。
+
+RDMのproblem framingはXLRMとして記録する。Xは外生的不確実性、Lは選択可能なpolicy lever、
+Rは入力と結果を結ぶモデル内関係、Mは複数のperformance measureである。robustnessとregretは
+measureごとのthresholdとensembleに対して定義し、一件の脆弱性発見だけをrobustnessの証明にしない。
 
 組合せ爆発は次の順序で抑える。
 
@@ -35,6 +40,7 @@ MPCそのものとは呼ばず、「逐次更新型の適応計画」と表現�
 3. 因子スクリーニングで影響の小さい因子を予備選別する。
 4. 残った因子から、脆弱性と選択肢喪失を生む条件をscenario discoveryで抽出する。
 5. 除外、固定、採用した因子と根拠をmodel cardへ残す。
+6. `max_runs`、seed数、sampling法、interaction test、停止条件をensemble manifestへ残す。
 
 ## Allowed
 
@@ -59,8 +65,8 @@ MPCそのものとは呼ばず、「逐次更新型の適応計画」と表現�
 ## Consequences
 
 未来予測の正しさではなく、どの条件で選択肢が失われ、どの行動が複数の将来に耐えるかを
-比較できる。代わりに、factor inventory、model card、run manifest、感度分析、feedback ledgerが
-実装上の必須成果物になる。
+比較できる。代わりに、XLRM、factor inventory、ensemble manifest、model card、run manifest、
+performance threshold、感度分析、feedback ledgerが実装上の必須成果物になる。
 
 ## Review Evidence
 
@@ -75,4 +81,4 @@ URLと採用範囲は`docs/RESEARCH_EVIDENCE.md`に記録する。
 
 - Phase 1でrun manifest、model card、factor inventoryのschemaを定義する
 - 同一入力replayと三分岐共通条件をtestへ固定する
-- Phase 2でfactor screeningとscenario discoveryを小さなfixtureに適用する
+- Phase 2でXLRM、run budget、factor screening、scenario discovery、holdout stabilityを小さなfixtureに適用する

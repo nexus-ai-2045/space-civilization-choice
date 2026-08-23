@@ -92,14 +92,15 @@ flowchart LR
   P1["1. 事実と未知を確認"] --> P2["2. 技術ツリーを選択"]
   P2 --> P3["3. 4ラウンドを実行"]
   P3 --> P4["4. 三分岐を比較"]
-  P4 --> P5["5. 結果から因果へ戻る"]
+  P4 --> P5["5. 結果からモデル内因果へ戻る"]
 
   classDef step fill:#f6f8fa,stroke:#315b7d,color:#0b1f33;
   class P1,P2,P3,P4,P5 step;
 ```
 
-1セッションは15〜25分を想定します。事実、シナリオ仮説、モデル仮定、LLM提案、未知を
-画面上で分け、各変化をturn ID、入力、行動、規則、根拠へ遡れるようにします。
+1セッションは15〜25分を想定します。知識状態（事実、シナリオ仮説、モデル仮定、未知）と、
+生成元（人間、公開資料、決定論的コア、LLM）と、検証状態を別々に表示します。各変化は
+turn ID、入力、行動、規則、根拠へ遡れるようにします。
 
 ## 現在地とロードマップ
 
@@ -108,7 +109,7 @@ flowchart LR
 | **0 公開設計** | ゴール、仕様、ADR、根拠台帳、安全境界 | **local review済み／remote CI待ち** |
 | **1 決定論的fixture** | 状態schema、event log、同一seed replay | 未着手 |
 | **2 三分岐比較** | 共通外生event、六観測軸、感度分析 | 未着手 |
-| **3 UI** | 分岐比較、因果trace、証拠台帳 | 未着手 |
+| **3 UI** | 分岐比較、モデル内因果trace、証拠台帳 | 未着手 |
 | **4 限定LLM** | schema検証された行動提案 | 未着手 |
 | **5 demo評価** | 人間レビュー、説明可能性eval | 未着手 |
 
@@ -125,7 +126,7 @@ canonical output hashが一致するところまで作ります。詳細は[ロ�
 | [シミュレーション設計](docs/SIMULATION_DESIGN.md) | 状態、分岐、replay、証拠分類 |
 | [アーキテクチャ](docs/ARCHITECTURE.md) | 決定論的coreと限定LLMの境界 |
 | [研究根拠台帳](docs/RESEARCH_EVIDENCE.md) | 事実、仮説、未知、出典 |
-| [既存基盤の再利用マップ](docs/REUSE_MAP.md) | FDE、開発保証、GitHub Ops、公開gateの正本と採用境界 |
+| [既存基盤の再利用マップ](docs/REUSE_MAP.md) | Fractal Decision Ecosystem（FDE）、開発保証、GitHub Ops、公開gateの正本と採用境界 |
 | [ADR一覧](docs/adr/README.md) | 採用した判断と見直し条件 |
 
 ## クイックスタート

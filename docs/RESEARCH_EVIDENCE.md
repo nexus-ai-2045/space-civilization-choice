@@ -12,6 +12,7 @@
 | F-003 | 宇宙戦略基金は企業・大学等の中長期の技術開発を支援する | fact | [JAXA 宇宙戦略基金](https://fund.jaxa.jp/about/) |
 | F-004 | 探査分野に月面輸送・着陸等の技術開発テーマがある | fact | [JAXA 宇宙戦略基金「探査等」](https://fund.jaxa.jp/techfield/probe/) |
 | F-005 | メタ安全保障ハッカソンの公開課題文書が存在する | fact | [メタ安全保障 — 概念解説とハッカソン課題の発想集](https://prtimes.jp/a/?f=d80352-184-caedebb354dd205d5811c599da74761b.pdf) |
+| F-006 | 同文書は、個別領域より領域間の結合と連鎖を対象とし、実践では対象を絞って一本の連鎖を観測するよう求める | fact（文書の定義） | [同コンセプトペーパー pp.1, 3](https://prtimes.jp/a/?f=d80352-184-caedebb354dd205d5811c599da74761b.pdf) |
 
 具体的な人数、期間、予算額は、MVP入力へ採用する直前に該当一次資料の本文と日付を再確認する。
 
@@ -38,9 +39,10 @@ SciSpaceでも技術主権・公的R&D・標準を検索したが、今回の主
 | M-004 | elementary effectsは、多数因子の予備スクリーニングに使える | 全組合せの前に因子を絞り、除外理由をmodel cardへ残す | [Morris 1991](https://doi.org/10.1080/00401706.1991.10484804) |
 | M-005 | 宇宙活動の長期持続可能性では、デブリ、衝突、干渉、運用複雑性が制約になる | 外部ベンチマーク。日本の政策事実とは分ける | [UNOOSA LTS Guidelines](https://www.unoosa.org/res/oosadoc/data/documents/2019/aac_105c_1l/aac_105c_1l_366_0_html/V1805022.pdf) |
 | M-006 | 月から火星への目標設計は、国際協力、責任ある利用、相互運用性を反復的に見直す | 外部ベンチマーク。適応的なreview設計の比較材料 | [NASA Moon to Mars Objectives](https://www.nasa.gov/wp-content/uploads/2022/09/m2m-objectives-exec-summary.pdf) |
+| M-007 | MPCは有限horizonの制約付き最適化を反復し、最適列の先頭行動を適用してhorizonを更新する | 「逐次更新型の適応計画」とMPC実装済みの境界を定義する | [Rawlings, Mayne, Diehl, *Model Predictive Control*](https://cdn.syscop.de/publications/Rawlings2017.pdf) |
 
-MPCは着想元に限定する。数理状態方程式、目的関数、制約付き最適化、安定性を実装するまでは、
-本プロジェクトをMPC実装と記述しない。
+MPCは着想元に限定する。予測モデル、有限horizonの目的、制約付き反復最適化、観測更新、先頭行動の
+適用を実装するまでは、本プロジェクトをMPC実装と記述しない。安定性は定義条件ではなく、別の保証項目とする。
 
 ## シナリオ仮説
 

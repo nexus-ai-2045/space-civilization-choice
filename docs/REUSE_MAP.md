@@ -19,6 +19,17 @@
 default HEADは参照時点の上流状態であり、このrepoの依存lockではない。実行に使うローカル版と
 上流HEADに差がある場合、暗黙に更新せず、検証結果へ実行版を記録する。
 
+本repoでFDEはFractal Decision Ecosystemを指す。宇宙・航法分野のFault Detection and Exclusionとは
+別概念であり、初出では略さずに記載する。
+
+## 評価候補（未採用）
+
+| 候補 | 既存機能 | 現在の判断 | 参照HEAD |
+|---|---|---|---|
+| [EMA Workbench](https://github.com/quaquel/EMAworkbench) | 実験設計、並列実行、PRIM、coverage／density、feature scoring、SALib連携 | Phase 2前に小fixtureで適合性・依存規模・再現性をsmokeする。現在は依存追加・コード複製なし | [`3798b37`](https://github.com/quaquel/EMAworkbench/commit/3798b375bc4208356a74432e67040f38c6cf75a5) |
+
+採用時は上流`LICENSE.md`の条件、package version、lock、security、撤去方法を確認し、dependency ADRを追加する。
+
 ## このrepoへの接続
 
 | 契約 | repo内の接続先 | 現在の証拠 |
@@ -26,7 +37,7 @@ default HEADは参照時点の上流状態であり、このrepoの依存lockで
 | FDEのgoalとfeedback | [`PROJECT_GOAL.md`](../PROJECT_GOAL.md)、[`ADR-0005`](adr/0005-adaptive-exploratory-decision-loop.md) | ゴール、未知、完了条件、最小PDCA、return pathを分離 |
 | engineering-brainの開発保証 | [`ROADMAP.md`](ROADMAP.md)、[`OPERATIONS.md`](OPERATIONS.md) | phase別done_whenと、local／remote／人間判断を分離 |
 | GitHub Ops | [`OPERATIONS.md`](OPERATIONS.md)、[`PUBLIC_READY.md`](../PUBLIC_READY.md) | identity probeとsettings read-backを記録 |
-| worktree lifecycle | 本文書とGitの作業branch | read-only scanで`protected`、`unpushed_commits=3`、変更なしを確認 |
+| worktree lifecycle | 本文書とGitの作業branch | anchor `9ad1a652...`のread-only scanで`protected`、`unpushed_commits=4`、変更なしを確認 |
 | repo preflight | [`PREFLIGHT.md`](../PREFLIGHT.md)、CI | README設計、リンク、履歴、公開intentを検査 |
 | ratchet | [`.ai-ratchet-gate/baseline.txt`](../.ai-ratchet-gate/baseline.txt)、CI | baseline 0、新規矛盾0を維持 |
 
