@@ -28,8 +28,10 @@
 収録しない。複数agent討議、制約管理engine、local process preflightは`future_candidate`、
 音声対話runtimeは`out_of_scope`とする。
 
-これにより「見つけた」「接続できる」「試した」「運用保証された」を分離し、証拠なしのlevel昇格を
-[`check_operational_adoption.py`](../scripts/check_operational_adoption.py)で拒否する。
+これにより「見つけた」「接続できる」「試した」「運用保証された」を分離する。
+[`check_operational_adoption.py`](../scripts/check_operational_adoption.py)は証拠なしのlevel昇格と、
+非公開entryへのrepository URLまたはrevision記録を拒否する。未知の私的名称まで自動検出する
+完全な機密scanではないため、公開前のtarget diff scanと人間目視も維持する。
 
 ## 評価候補（未採用）
 

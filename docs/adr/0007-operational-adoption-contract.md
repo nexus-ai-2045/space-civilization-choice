@@ -36,7 +36,7 @@ related:
 
 この分類と証拠の正本は[`ops/adoption-manifest.json`](../../ops/adoption-manifest.json)とする。
 checkerを既存required `goal-contract` jobで実行し、分類の過大表示、固定hashとの不一致、
-証拠path欠落、非公開source identityのPUBLIC treeへの投影を拒否する。
+証拠path欠落、非公開entryへのrepository URLまたはrevision記録を拒否する。
 
 公開基盤の上流default HEADは依存lockではない。`enforced_ci`はrelease artifactとSHA-256を固定し、
 `operator_gate`と`design_reference`はreview済みrevisionを記録する。upstream driftは通知対象だが、

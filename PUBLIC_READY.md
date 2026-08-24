@@ -24,7 +24,7 @@
 - [x] README、LICENSE、SECURITY.md、CONTRIBUTING.mdあり
 - [x] `ai-ratchet-gate` release `v0.1.1`とwheel SHA-256をworkflow固定
 - [x] 公開基盤はURLとreview済みrevisionだけを参照し、コード・画像・文書本文を複製しない
-- [x] 非公開基盤は一般化した契約だけを採り、source identityを公開treeへ収録しない
+- [x] 非公開基盤は一般化した契約だけを採り、repository URLとrevisionをmanifestへ収録しない
 - [x] FDEとengineering-brainは`design_reference`でありruntime保証ではない
 - [x] GitHub Ops、worktree lifecycle、repo-preflightは`operator_gate`であり常時CI保証ではない
 - [x] Note記事公開と音声対話runtimeは現行simulation productの境界外
