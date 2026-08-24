@@ -26,7 +26,8 @@ phase完了はプロダクトMVP完了、公開承認、merge承認を意味し�
 
 完了条件: 同一snapshotとseedから三分岐を比較できる。
 
-追加条件: 三分岐が同じ`event_stream_hash`を共有し、factor inventory、予備スクリーニング、
+追加条件: 三分岐が同じ`exogenous_event_stream_hash`を共有し、分岐固有の全event logを
+それぞれの`event_log_hash`で検証できる。さらにfactor inventory、予備スクリーニング、
 少なくとも一つの脆弱性条件を再現可能なfixtureで説明できる。
 
 ## Phase 3: UI

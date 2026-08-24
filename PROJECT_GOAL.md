@@ -48,10 +48,12 @@ goal_id: space-civilization-choice-mvp-v1
 
 ## 実行契約
 
-比較runでは、`scenario_snapshot_hash`、`seed`、`model_version`、`event_stream_hash`を
-三分岐で固定する。変更できる主要因は最初に選ぶ技術ツリーと、その選択を入力としてモデル規則が
-生成するエージェント行動だけとする。各差分は`turn_id`、入力、行動、規則、`evidence_ref`へ遡れること。
-このtraceはモデル内部の遷移由来を示し、実世界の因果推定または因果証明を意味しない。
+比較runでは、`scenario_snapshot_hash`、`seed`、`model_version`、
+`exogenous_event_stream_hash`を三分岐で固定する。変更できる主要因は最初に選ぶ技術ツリーと、
+その選択を入力としてモデル規則が生成するエージェント行動だけとする。分岐内で生じる行動と
+状態遷移を含む全event logは分岐ごとに保存し、各分岐の`event_log_hash`で同一性を検証する。
+各差分は`turn_id`、入力、行動、規則、`evidence_ref`へ遡れること。このtraceはモデル内部の
+遷移由来を示し、実世界の因果推定または因果証明を意味しない。
 
 各review時点では、確認できた現在状態を取り込み、残り期間の分岐を再評価する。これは
 モデル予測制御（Model Predictive Control; MPC）に着想を得た逐次更新型の適応計画である。
@@ -71,7 +73,7 @@ goal_id: space-civilization-choice-mvp-v1
 
 - [ ] `GOAL-001`: 本文書、README、プロダクト仕様のゴール・非目標・ownerが矛盾しない
 - [ ] `REPLAY-001`: 同一のsnapshot hash、seed、model versionを二回実行し、canonical output hashが一致する
-- [ ] `BRANCH-001`: 三分岐が同一snapshot hash、seed、event stream hashから生成される
+- [ ] `BRANCH-001`: 三分岐が同一snapshot hash、seed、exogenous event stream hashから生成され、分岐固有の全event logがそれぞれのevent log hashで検証できる
 - [ ] `TRACE-001`: 六軸の各deltaをturn ID、入力、行動、モデル規則、evidence refへ遡れ、実世界の因果とモデル内部遷移を区別できる
 - [ ] `CLASS-001`: 全claim／提案に`record_kind`、`epistemic_class`、`provenance_type`、`validation_state`があり、不整合な組合せが0になる
 - [ ] `MODEL-001`: 全数値係数に単位、範囲、根拠、更新式、感度、反証条件がある

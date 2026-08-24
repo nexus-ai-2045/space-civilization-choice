@@ -11,8 +11,10 @@
 同じ`scenario_snapshot_id`と`seed`から、国際統合型、国内自立型、開放基盤型を分岐する。
 ラウンドは`2026`、`2030`、`2035`、`2040`の4つとする。
 
-三分岐は同じ`scenario_snapshot_hash`、`seed`、`model_version`、`event_stream_hash`を共有する。
-最初の技術ツリーと、その選択を入力としてモデル規則が生成する行動・状態だけをbranch間で変える。
+三分岐は同じ`scenario_snapshot_hash`、`seed`、`model_version`、
+`exogenous_event_stream_hash`を共有する。最初の技術ツリーと、その選択を入力としてモデル規則が
+生成する行動・状態だけをbranch間で変える。分岐内で生じた行動と状態遷移を含む全event logは
+分岐ごとに保存し、各分岐の`event_log_hash`で同一性を検証する。
 
 ```text
 scenario_snapshot_id
@@ -106,7 +108,7 @@ sequenceDiagram
 
 - `record_kind`: `source_claim`、`exogenous_event`、`simulated_transition`、`action_proposal`
 - `epistemic_class`: `fact`、`scenario_hypothesis`、`model_assumption`、`inference`、`unknown`
-- `provenance_type`: `official_source`、`human_input`、`deterministic_core`、`llm`
+- `provenance_type`: `official_source`、`academic_source`、`third_party_public_source`、`human_input`、`deterministic_core`、`llm`
 - `validation_state`: `proposed`、`accepted_for_run`、`rejected`、`superseded`
 
 LLMの提案は`record_kind=action_proposal`、`provenance_type=llm`で示し、知識状態と混同しない。
@@ -115,7 +117,8 @@ LLMの提案は`record_kind=action_proposal`、`provenance_type=llm`で示し、
 ## 再現性
 
 - snapshot、seed、モデル版、prompt版、入力資料のhashを保存する
-- 三分岐では外生イベント列を共有する
+- 三分岐では外生イベント列と`exogenous_event_stream_hash`を共有する
+- 行動と状態遷移を含む全event logは分岐ごとに保存し、`event_log_hash`はbranch間の同一条件にしない
 - LLM応答の原文、構造化後の行動、棄却理由を分けて保存する
 - 同じ入力で決定論的コアの状態差分が一致するテストを置く
 - モデル変更後の結果を以前の結果へ上書きしない

@@ -31,8 +31,14 @@ event、claim、action proposalを次の四つの直交fieldで記録する。
 |---|---|---|
 | `record_kind` | `source_claim` / `exogenous_event` / `simulated_transition` / `action_proposal` | 何を記録しているか |
 | `epistemic_class` | `fact` / `scenario_hypothesis` / `model_assumption` / `inference` / `unknown` | 内容をどの知識状態として扱うか |
-| `provenance_type` | `official_source` / `human_input` / `deterministic_core` / `llm` | どこから来たか |
+| `provenance_type` | `official_source` / `academic_source` / `third_party_public_source` / `human_input` / `deterministic_core` / `llm` | どこから来たか |
 | `validation_state` | `proposed` / `accepted_for_run` / `rejected` / `superseded` | runへ採用できる状態か |
+
+公開資料の生成元を一つの値へ潰さない。発行主体自身の政策・制度・事業を示す資料は
+`official_source`、学術研究は`academic_source`、コンセプトペーパーや主催者サイトなど
+それ以外の公開資料は`third_party_public_source`とする。これらには`source_id`、発行者、書誌情報、
+URLまたはDOI、取得日を保持し、分類後も元資料を一意に参照できるようにする。同じ資料でも、
+異なるclaimで果たす役割が違う場合はclaim単位で分類する。
 
 LLM出力は`provenance_type=llm`に固定するが、それだけで`epistemic_class`を決めない。
 決定論的コアの出力も実世界の事実へ昇格せず、`record_kind=simulated_transition`として保持する。
@@ -41,6 +47,7 @@ LLM出力は`provenance_type=llm`に固定するが、それだけで`epistemic_
 ## Allowed
 
 - 同じclaimへ四fieldとsource ID、reviewer、review時刻を付ける
+- 公開資料の種別と書誌情報を保持し、公式事実、学術的補助根拠、その他の第三者資料を区別する
 - UIで四軸を別label、filter、形状として表示する
 - 互換性のない組合せをschemaとnegative testで拒否する
 - enum追加が必要な場合、model versionとmigrationを伴うADRで見直す
@@ -54,7 +61,8 @@ LLM出力は`provenance_type=llm`に固定するが、それだけで`epistemic_
 
 ## Human Review Gate
 
-許可値、互換性規則、factへの昇格条件、LLM提案の採否、既存runのmigrationは人間レビューを必須とする。
+許可値、公開資料の分類、互換性規則、factへの昇格条件、LLM提案の採否、既存runのmigrationは
+人間レビューを必須とする。
 schema検査のpassは、claimの内容またはrunの政策的妥当性を承認しない。
 
 ## Consequences
