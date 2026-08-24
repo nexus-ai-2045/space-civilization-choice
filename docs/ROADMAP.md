@@ -7,6 +7,7 @@ phase完了はプロダクトMVP完了、公開承認、merge承認を意味し�
 
 - 一枚設計、仕様、ADR、根拠台帳、安全境界
 - 公開前gateと人間レビュー
+- 採用level、固定版、証拠、drift方針をmanifest化しrequired CIで検査
 
 完了条件: 事実・仮説・未知が分離され、未実装を明記し、secret・個人path・権利境界を確認する。
 

@@ -58,6 +58,9 @@ jobs:
       - name: Check project goal contract
         run: python scripts/check_project_goal.py --json
 
+      - name: Check operational adoption contract
+        run: python scripts/check_operational_adoption.py --json
+
   ratchet:
     env:
       # GitHub Windows runnerのredirected stdoutはcp1252になる場合がある。

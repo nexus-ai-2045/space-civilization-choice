@@ -108,7 +108,7 @@ flowchart LR
 
 | Phase | 成果物 | 状態 |
 |---|---|---|
-| **0 公開設計** | ゴール、仕様、ADR、根拠台帳、安全境界 | **local review済み／remote CI待ち** |
+| **0 公開設計** | ゴール、仕様、ADR、根拠台帳、安全境界 | **main公開済み／運用契約更新はreview待ち** |
 | **1 決定論的fixture** | 状態schema、event log、同一seed replay | 未着手 |
 | **2 三分岐比較** | 共通外生event、六観測軸、感度分析 | 未着手 |
 | **3 UI** | 分岐比較、モデル内因果trace、証拠台帳 | 未着手 |
@@ -130,6 +130,7 @@ canonical output hashが一致するところまで作ります。詳細は[ロ�
 | [アーキテクチャ](docs/ARCHITECTURE.md) | 決定論的coreと限定LLMの境界 |
 | [研究根拠台帳](docs/RESEARCH_EVIDENCE.md) | 事実、仮説、未知、出典 |
 | [既存基盤の再利用マップ](docs/REUSE_MAP.md) | Fractal Decision Ecosystem（FDE）、開発保証、GitHub Ops、公開gateの正本と採用境界 |
+| [運用採用manifest](ops/adoption-manifest.json) | 採用level、固定版、証拠、drift方針の機械可読な正本 |
 | [ADR一覧](docs/adr/README.md) | 採用した判断と見直し条件 |
 
 ## クイックスタート
@@ -141,6 +142,7 @@ canonical output hashが一致するところまで作ります。詳細は[ロ�
 ```powershell
 py -3.13 -m unittest discover -s tests -p "test_*.py"
 py -3.13 scripts/check_project_goal.py --json
+py -3.13 scripts/check_operational_adoption.py --json
 
 $ratchet = Join-Path $env:APPDATA 'Python\Python313\Scripts\ai-ratchet-gate.exe'
 & $ratchet --repo .

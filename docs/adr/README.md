@@ -8,6 +8,7 @@ ADRは、設計上の重要判断と、採らなかった選択肢、見直し�
 - [ADR-0004: 公開repoと内部資料を分離する](0004-public-repository-boundary.md)
 - [ADR-0005: 探索的・逐次更新型の意思決定ループを採用する](0005-adaptive-exploratory-decision-loop.md)
 - [ADR-0006: 知識状態・記録種別・生成元・検証状態を分離する](0006-separate-epistemic-provenance-validation.md)
+- [ADR-0007: 外部基盤の採用レベルと運用証拠を分離する](0007-operational-adoption-contract.md)
 
 状態は`proposed`、`accepted`、`superseded`、`rejected`を使う。重要なモデル境界を変更する場合は、
 既存ADRを書き換えず、新しいADRで置き換える。
