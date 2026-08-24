@@ -1,0 +1,69 @@
+# 研究根拠台帳
+
+最終確認日: 2026-08-24。政策・事業の現状は公式一次資料を正とする。論文は因果仮説の補助であり、
+日本の月面政策についての事実を直接証明するものではない。
+
+## 公開事実
+
+| ID | 主張 | 分類 | 根拠 |
+|---|---|---|---|
+| F-001 | 日本はアルテミス計画へ参加している | fact | [内閣府 宇宙基本計画](https://www8.cao.go.jp/space/plan/keikaku.html) |
+| F-002 | JAXAは有人与圧ローバーの開発・運用に取り組んでいる | fact | [JAXA 有人与圧ローバー](https://humans-in-space.jaxa.jp/biz-lab/tech/pressurized-rover/) |
+| F-003 | 宇宙戦略基金は企業・大学等の中長期の技術開発を支援する | fact | [JAXA 宇宙戦略基金](https://fund.jaxa.jp/about/) |
+| F-004 | 探査分野に月面輸送・着陸等の技術開発テーマがある | fact | [JAXA 宇宙戦略基金「探査等」](https://fund.jaxa.jp/techfield/probe/) |
+| F-005 | メタ安全保障ハッカソンの公開課題文書が存在する | fact | [メタ安全保障 — 概念解説とハッカソン課題の発想集](https://prtimes.jp/a/?f=d80352-184-caedebb354dd205d5811c599da74761b.pdf) |
+| F-006 | 同文書は、個別領域より領域間の結合と連鎖を対象とし、実践では対象を絞って一本の連鎖を観測するよう求める | fact（文書の定義） | [同コンセプトペーパー pp.1, 3](https://prtimes.jp/a/?f=d80352-184-caedebb354dd205d5811c599da74761b.pdf) |
+
+具体的な人数、期間、予算額は、MVP入力へ採用する直前に該当一次資料の本文と日付を再確認する。
+
+## 学術的な補助根拠
+
+| ID | 限定的に支える主張 | 根拠 | 限界 |
+|---|---|---|---|
+| A-001 | 技術発展の履歴が将来の革新速度へ影響し、lock-inは経路依存の一形態になり得る | Stephen J. Redding, “Path Dependence, Endogenous Innovation, and Growth,” 2002, [DOI](https://doi.org/10.1111/1468-2354.t01-1-00054) | 理論モデルであり、日本の宇宙政策の実証ではない |
+| A-002 | 標準形成は企業・政府の連携とR&D incentiveに関係し得る | Troy J. Scott and John T. Scott, “Standards and innovation,” 2015, [DOI](https://doi.org/10.1080/10438599.2014.988516) | 米国の事例と理論であり、因果係数は転用できない |
+
+Consensusで候補を検索後に書誌情報を取得し、SciteでDOI、open access状態、引用分類を照合した。
+SciSpaceでも技術主権・公的R&D・標準を検索したが、今回の主張へ直接対応する一次研究としては
+採用しなかった。Sider ScholarのOpenAlex検索は結果の関連性が低く、検索結果を根拠に採用しなかった。
+
+## 方法論の一次資料
+
+以下は日本の政策事実ではなく、シミュレーション設計へ採用する方法論の根拠である。
+
+| ID | 方法・主張 | 設計への採用範囲 | 根拠 |
+|---|---|---|---|
+| M-001 | 探索的モデリングは、大きな不確実性のある系を単一予測ではなく計算実験で調べる | 上位方法論。plausible futuresと前提依存性を比較する | [Bankes 1993](https://doi.org/10.1287/opre.41.3.435) |
+| M-002 | 深い不確実性下では、将来集合に対するrobustness、脆弱性、regretを比較する | 三技術ツリーを単一期待値で順位付けしない | [Lempert, Popper, Bankes 2003](https://www.rand.org/content/dam/rand/pubs/monograph_reports/2007/MR1626.pdf) |
+| M-003 | 適応経路は、行動の有効期限と条件変化時の切替先を扱う | review時点、tipping point、切替条件をrunへ記録する | [Haasnoot et al. 2013](https://doi.org/10.1016/j.gloenvcha.2012.12.006) |
+| M-004 | elementary effectsは、多数因子の予備スクリーニングに使える | 全組合せの前に因子を絞り、除外理由をmodel cardへ残す | [Morris 1991](https://doi.org/10.1080/00401706.1991.10484804) |
+| M-005 | 宇宙活動の長期持続可能性では、デブリ、衝突、干渉、運用複雑性が制約になる | 外部ベンチマーク。日本の政策事実とは分ける | [UNOOSA LTS Guidelines](https://www.unoosa.org/res/oosadoc/data/documents/2019/aac_105c_1l/aac_105c_1l_366_0_html/V1805022.pdf) |
+| M-006 | 月から火星への目標設計は、国際協力、責任ある利用、相互運用性を反復的に見直す | 外部ベンチマーク。適応的なreview設計の比較材料 | [NASA Moon to Mars Objectives](https://www.nasa.gov/wp-content/uploads/2022/09/m2m-objectives-exec-summary.pdf) |
+| M-007 | MPCは有限horizonの制約付き最適化を反復し、最適列の先頭行動を適用してhorizonを更新する | 「逐次更新型の適応計画」とMPC実装済みの境界を定義する | [Rawlings, Mayne, Diehl, *Model Predictive Control*](https://cdn.syscop.de/publications/Rawlings2017.pdf) |
+
+MPCは着想元に限定する。予測モデル、有限horizonの目的、制約付き反復最適化、観測更新、先頭行動の
+適用を実装するまでは、本プロジェクトをMPC実装と記述しない。安定性は定義条件ではなく、別の保証項目とする。
+
+## シナリオ仮説
+
+| ID | 仮説 | 反証・感度確認 |
+|---|---|---|
+| H-001 | 追加重点枠を一つの技術ツリーへ10年間集中する | 分散配分、期間5年・15年との比較 |
+| H-002 | 投資配分が企業・技能の生存を通じて標準・知財・供給網へ影響する | 遅延、逆因果、国際共同開発の代替経路を試す |
+| H-003 | 標準・供給網の固定が将来社会の参加条件と日本の役割認識へ波及する | 認知層を切ったrunと比較する |
+| H-004 | 将来の宇宙秩序が日本の産業・同盟・accessへ帰還する | 帰還linkを切ったrunと比較する |
+
+## モデル仮定と計算上の注意
+
+Wolframで、仮の六軸値と各軸の重み1〜5の全15,625通りを試したところ、重みの置き方で
+一位が変わり、同点も生じた。これは政策上の結論ではなく、仮の値でも総合順位が価値判断へ
+依存することのsanity checkである。このためMVPは六軸を保持し、単一総合点を正解として使わない。
+
+## 未知
+
+- 実際の追加重点枠、採択、予算配分
+- 各主体の選好と交渉力
+- 技術成熟速度、失敗率、費用曲線
+- 2040年の国際環境と月面活動の規模
+- 六観測軸の初期値、更新係数、相互作用
+- 「文明選択権」が当事者にとって望ましい形
