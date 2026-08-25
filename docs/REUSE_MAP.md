@@ -1,26 +1,37 @@
 # 既存基盤の再利用マップ
 
-このrepoは、判断制御、開発保証、GitHub操作、worktree管理、公開前検査、回帰防止を
-独自実装しない。それぞれの正本を分離したまま、必要な契約とgateだけを利用する。
+このrepoは、既存基盤を一律に「導入済み」と表現しない。採用level、固定版、証拠、drift方針の
+機械可読な正本は[`adoption-manifest.json`](../ops/adoption-manifest.json)、判断理由は
+[`ADR-0007`](adr/0007-operational-adoption-contract.md)に置く。
 
-記録日: 2026-08-24
+記録日: 2026-08-25
 
 ## 採用マップ
 
-| 正本 | このrepoで採用する契約 | 利用形態 | 参照したdefault HEAD |
+| 正本 | 採用level | このrepoで使う契約 | 固定・review済み対象 |
 |---|---|---|---|
-| [Fractal Decision Ecosystem](https://github.com/nexus-ai-2045/fractal-decision-ecosystem) | Goal → Evidence → Decision → Verify → Closure、事実・推測・不明の分離、公開停止線 | 設計契約 | [`a41aff6`](https://github.com/nexus-ai-2045/fractal-decision-ecosystem/commit/a41aff6b0e4eefe728d6177017212b89be7820e2) |
-| [engineering-brain](https://github.com/nexus-ai-2045/engineering-brain) | reuse-first、実装・検証・運用保証・人間判断の分離 | 設計契約。runtimeは下記理由で保留 | [`b7428b4`](https://github.com/nexus-ai-2045/engineering-brain/commit/b7428b4ddc4b75f7e091e1e1bc50473e58b12d9f) |
-| [github-ops-skills](https://github.com/nexus-ai-2045/github-ops-skills) | remote、identity、visibility、承認境界、write後read-back | 実行gate | [`05d7762`](https://github.com/nexus-ai-2045/github-ops-skills/commit/05d7762c32c2ee3975d6fb2f4b6e2e2a4827f210) |
-| [worktree-lifecycle-control](https://github.com/nexus-ai-2045/worktree-lifecycle-control) | worktreeを削除対象ではなく、統合証跡を持つ作業資産として扱う | read-only scan | [`dd27137`](https://github.com/nexus-ai-2045/worktree-lifecycle-control/commit/dd27137d2130539a9b5687622e254de8cb0eeac0) |
-| [repo-preflight](https://github.com/nexus-ai-2045/repo-preflight) | secret、個人path、履歴、必須文書、README、公開境界のfail-closed検査 | 実行gate | [`b63a0af`](https://github.com/nexus-ai-2045/repo-preflight/commit/b63a0afbda4eaa1ca7970355c41bf6fd73a52a32) |
-| [ai-ratchet-gate](https://github.com/nexus-ai-2045/ai-ratchet-gate) | 既存baselineを急に全修復せず、新しい悪化だけを止める | 実行gate | [`627049c`](https://github.com/nexus-ai-2045/ai-ratchet-gate/commit/627049cff78a671379159a9bf3057b22ed304dc7) |
-
-default HEADは参照時点の上流状態であり、このrepoの依存lockではない。実行に使うローカル版と
-上流HEADに差がある場合、暗黙に更新せず、検証結果へ実行版を記録する。
+| [Fractal Decision Ecosystem](https://github.com/nexus-ai-2045/fractal-decision-ecosystem) | `design_reference` | Goal → Evidence → Decision → Verify → Closure、事実・仮説・未知の分離 | [`a41aff6`](https://github.com/nexus-ai-2045/fractal-decision-ecosystem/commit/a41aff6b0e4eefe728d6177017212b89be7820e2) |
+| [engineering-brain](https://github.com/nexus-ai-2045/engineering-brain) | `design_reference` | reuse-first、実装・検証・運用保証・人間判断の分離 | [`cbd1f4c`](https://github.com/nexus-ai-2045/engineering-brain/commit/cbd1f4cbdd83cbc09d5cf959590219288654c160) |
+| [github-ops-skills](https://github.com/nexus-ai-2045/github-ops-skills) | `operator_gate` | remote、identity、visibility、承認境界、write後read-back | [`3a6688c`](https://github.com/nexus-ai-2045/github-ops-skills/commit/3a6688c5d9d4234317947d0358127949e6b718a1) |
+| [worktree-lifecycle-control](https://github.com/nexus-ai-2045/worktree-lifecycle-control) | `operator_gate` | worktreeを統合証跡のある作業資産として扱うread-only棚卸し | [`3f5f035`](https://github.com/nexus-ai-2045/worktree-lifecycle-control/commit/3f5f035a8f017503865a44a6fa57ac099d95cb12) |
+| [repo-preflight](https://github.com/nexus-ai-2045/repo-preflight) | `operator_gate` | push、PR、merge、公開前のfail-closed検査 | [`35a06cc`](https://github.com/nexus-ai-2045/repo-preflight/commit/35a06cc4264423951195c54ae057d82fff360c8f) |
+| [ai-ratchet-gate](https://github.com/nexus-ai-2045/ai-ratchet-gate) | `enforced_ci` | trackedかつignoredの新規矛盾をrequired CI contextで拒否 | release `v0.1.1`とwheel SHA-256をworkflowで固定 |
+| [note-publishing-suite](https://github.com/nexus-ai-2045/note-publishing-suite) | `out_of_scope` | Note記事の人間承認付き公開運用 | simulation productには接続しない |
 
 本repoでFDEはFractal Decision Ecosystemを指す。宇宙・航法分野のFault Detection and Exclusionとは
 別概念であり、初出では略さずに記載する。
+
+## 非公開基盤から採るもの
+
+親workspace境界、taskのfan-in、capability成熟度、feedback ledgerの一般契約だけを
+`design_reference`として採る。非公開sourceの名前、URL、revision、本文、個人logはPUBLIC treeへ
+収録しない。複数agent討議、制約管理engine、local process preflightは`future_candidate`、
+音声対話runtimeは`out_of_scope`とする。
+
+これにより「見つけた」「接続できる」「試した」「運用保証された」を分離する。
+[`check_operational_adoption.py`](../scripts/check_operational_adoption.py)は証拠なしのlevel昇格と、
+非公開entryへのrepository URLまたはrevision記録を拒否する。未知の私的名称まで自動検出する
+完全な機密scanではないため、公開前のtarget diff scanと人間目視も維持する。
 
 ## 評価候補（未採用）
 
@@ -28,30 +39,30 @@ default HEADは参照時点の上流状態であり、このrepoの依存lockで
 |---|---|---|---|
 | [EMA Workbench](https://github.com/quaquel/EMAworkbench) | 実験設計、並列実行、PRIM、coverage／density、feature scoring、SALib連携 | Phase 2前に小fixtureで適合性・依存規模・再現性をsmokeする。現在は依存追加・コード複製なし | [`3798b37`](https://github.com/quaquel/EMAworkbench/commit/3798b375bc4208356a74432e67040f38c6cf75a5) |
 
-採用時は上流`LICENSE.md`の条件、package version、lock、security、撤去方法を確認し、dependency ADRを追加する。
+採用時は上流license、package version、lock、security、撤去方法を確認し、dependency ADRを追加する。
 
 ## このrepoへの接続
 
-| 契約 | repo内の接続先 | 現在の証拠 |
+| 契約 | repo内の接続先 | 現在の保証 |
 |---|---|---|
-| FDEのgoalとfeedback | [`PROJECT_GOAL.md`](../PROJECT_GOAL.md)、[`ADR-0005`](adr/0005-adaptive-exploratory-decision-loop.md) | ゴール、未知、完了条件、最小PDCA、return pathを分離 |
-| engineering-brainの開発保証 | [`ROADMAP.md`](ROADMAP.md)、[`OPERATIONS.md`](OPERATIONS.md) | phase別done_whenと、local／remote／人間判断を分離 |
-| GitHub Ops | [`OPERATIONS.md`](OPERATIONS.md)、[`PUBLIC_READY.md`](../PUBLIC_READY.md) | identity probeとsettings read-backを記録 |
-| worktree lifecycle | 本文書とGitの作業branch | anchor `9ad1a652...`のread-only scanで`protected`、`unpushed_commits=4`、変更なしを確認 |
-| repo preflight | [`PREFLIGHT.md`](../PREFLIGHT.md)、CI | README設計、リンク、履歴、公開intentを検査 |
-| ratchet | [`.ai-ratchet-gate/baseline.txt`](../.ai-ratchet-gate/baseline.txt)、CI | baseline 0、新規矛盾0を維持 |
+| FDEのgoalとfeedback | [`PROJECT_GOAL.md`](../PROJECT_GOAL.md)、[`ADR-0005`](adr/0005-adaptive-exploratory-decision-loop.md) | 設計契約。runtime保証ではない |
+| engineering-brainの開発保証 | [`ROADMAP.md`](ROADMAP.md)、[`OPERATIONS.md`](OPERATIONS.md) | 設計契約。runtime未接続 |
+| GitHub Ops | [`OPERATIONS.md`](OPERATIONS.md)、[`PUBLIC_READY.md`](../PUBLIC_READY.md) | 外部writeごとのoperator receiptが必要 |
+| worktree lifecycle | [`OPERATIONS.md`](OPERATIONS.md) | read-only棚卸し。cleanup権限ではない |
+| repo preflight | [`PREFLIGHT.md`](../PREFLIGHT.md)、[`OPERATIONS.md`](OPERATIONS.md) | intentごとのoperator gate。passは承認ではない |
+| ratchet | [workflow](../.github/workflows/ai-ratchet-gate.yml)、[baseline](../.ai-ratchet-gate/baseline.txt) | `v0.1.1` artifactをhash固定しrequired CIで実行 |
+| 採用level整合 | [manifest](../ops/adoption-manifest.json)、[checker](../scripts/check_operational_adoption.py) | 既存required `goal-contract` jobで検査 |
 
-## 既知の差分と停止線
+## 既知の停止線
 
-- `engineering-brain`のローカルCLIは2026-08-24の確認でPython moduleを解決できなかった。
-  このrepoのために別実装を作らず、runtime連携は正本の復旧とversion確認まで保留する。
-- `github-ops-skills`は検査時のローカル版と現在の上流HEADが異なる。既存の検査証跡は
-  実際に使った版を正とし、上流更新は別のdrift確認を通す。
-- `worktree-lifecycle-control`のscanはcleanup許可ではない。branch、worktree、commitの削除は行わない。
+- `engineering-brain`は設計参照だけで、runtimeの導入・接続・運用を保証しない。
+- `github-ops-skills`、`worktree-lifecycle-control`、`repo-preflight`は人が外部操作前に実行する。
+  CIが代行した、または常時保証したとは表現しない。
+- upstream default HEADはlockではない。releaseまたはreview済みrevisionは人間レビューなしに更新しない。
 - どのgateのpassも、PUBLIC repoへのpush、Pull Request、merge、releaseを承認しない。
 
 ## 権利と依存境界
 
-このrepoへ上記6リポのコード、画像、文書本文は複製していない。URL、commit ID、契約の要約だけを
-記録する。将来コードをvendor、fork、package依存として導入する場合は、対象commitのlicense、
-security、更新方法、撤去方法を再確認し、ADRと人間レビューを追加する。
+このrepoへ参照基盤のコード、画像、文書本文は複製していない。公開URL、review済みrevision、
+契約の要約だけを記録する。将来コードをvendor、fork、package依存として導入する場合は、
+対象versionのlicense、security、更新方法、撤去方法を再確認し、ADRと人間レビューを追加する。

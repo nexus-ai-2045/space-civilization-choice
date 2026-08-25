@@ -22,6 +22,7 @@ repository identityや文書の役割を置き換えない。
 | `research_evidence` | 公開可能な事実・仮説・未知 | [`docs/RESEARCH_EVIDENCE.md`](docs/RESEARCH_EVIDENCE.md) | READMEの公式情報 |
 | `decisions` | 設計判断 | [`docs/adr/README.md`](docs/adr/README.md) | 個別ADR |
 | `reuse_boundary` | 既存基盤の採用境界 | [`docs/REUSE_MAP.md`](docs/REUSE_MAP.md) | upstream repositoryのreview済みrevision |
+| `operational_adoption` | 採用level、固定版、証拠、drift方針 | [`ops/adoption-manifest.json`](ops/adoption-manifest.json) | required `goal-contract`による機械検査 |
 | `public_readiness` | 公開準備の証拠 | [`PUBLIC_READY.md`](PUBLIC_READY.md) | preflight結果。公開許可そのものではない |
 
 同じconcernの説明を別文書へ再掲する場合、上表のcanonical fileへの相対linkを持つprojectionとして扱う。

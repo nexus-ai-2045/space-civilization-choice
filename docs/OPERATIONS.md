@@ -18,6 +18,9 @@
 既存基盤の正本、採用する契約、実行版と上流HEADの差、非採用範囲は
 [`REUSE_MAP.md`](REUSE_MAP.md)へ集約する。正本のコードをこのrepoへ複製せず、上流更新は
 drift確認と回帰検査を通してから採用する。
+採用level、固定版、証拠path、drift方針の機械可読な正本は
+[`adoption-manifest.json`](../ops/adoption-manifest.json)とし、既存required `goal-contract`で
+[`check_operational_adoption.py`](../scripts/check_operational_adoption.py)を実行する。
 
 ## 操作順序
 
@@ -29,8 +32,8 @@ drift確認と回帰検査を通してから採用する。
    `ratchet (windows-latest)`をrequired status checkにする。現在はeligible reviewerがowner本人だけなので
    approving review／CODEOWNERS reviewを必須化しない。第二reviewer追加後に別reviewで昇格する。
    workflowとcheckerを同じPRで変更できても、required contextを削除してgreen扱いにはしない。
-   2026-08-24のPUBLIC read-backではruleset 0件、`main`保護なしである。PRで実check名を取得した後、
-   別承認で設定し、read-backできるまでは「保護済み」と表現しない。
+   2026-08-25のPUBLIC read-backではactive main ruleset `21258820`があり、上記4 contextを
+   GitHub Actions app ID `15368`へ固定している。workflow内のjob名変更はruleset変更として扱う。
 4. `ai-ratchet-gate`を通常モードで実行する。
 5. 差分と検査結果を人間が確認してからcommitする。
 
@@ -68,27 +71,27 @@ drift確認と回帰検査を通してから採用する。
 
 ## 現在の実測
 
-2026-08-24時点:
+2026-08-25時点:
 
 - repo: `nexus-ai-2045/space-civilization-choice`
-- branch: `codex/public-ready-foundation`
-- visibility: `PUBLIC`（本taskによる変更ではない。変更主体は未確認）
+- remote main: `290d511b03329a89c9e1c78832a08578ed8b67d8`
+- visibility: `PUBLIC`
+- main CI: run `32686326484`でrequired 4 context成功
+- active main ruleset: `21258820`
+- required checks: `secret-scan`、`goal-contract`、`ratchet (ubuntu-latest)`、`ratchet (windows-latest)`
+- force pushとbranch deletion: 禁止
 - GitHub Ops probe: `status=ok`
 - remote owner、active login、credential usernameはrepo ownerと一致
 - environment token override: なし
-- GitHub Ops Core Suite: `nexus-ai-2045/github-ops-skills main@7d5c146`
-- Codex adapter: 8 skill `READY`、配布後hash mismatch 0
-- account map: schema pass、本repoとCore Suite repoだけを登録
+- GitHub Ops: `operator_gate`。review済み上流revisionはmanifestへ記録し、外部writeごとに実行版をreceiptへ残す
+- repo-preflight: `operator_gate`。intentごとに再実行する
+- worktree lifecycle: `operator_gate`。read-only棚卸しでありcleanup権限ではない
+- ai-ratchet-gate: `enforced_ci`。release `v0.1.1`とwheel SHA-256をworkflow固定
+- FDEとengineering-brain: `design_reference`。runtime保証ではない
 - write preflight: PUBLIC repoへのpush / PR / settings変更は人間レビュー必須
-- Core Suite検証: unit test 118 pass、live read-only E2Eは`READY / live_read_only_verified`
-- CodeQL governance: 公開候補はPythonを含むため適格候補。live default branchの言語検出は空、Default setupは`not-configured`、解析実績なし
-- ruleset 0件、`main` branch protectionなし
-- Actions full-length SHA pinning、secret scanning、push protection、Private vulnerability reportingは設定済み・read-back済み
-- worktree lifecycle read-only scan: anchor `9ad1a652...`で`protected`、未push4 commit、cleanup実行なし
-- engineering-brain runtime: module解決不能のため設計契約のみ採用、runtime連携は保留
-- external mutation: visibility変更なし。上記security／Actions設定は同日実施済み。本修正・再監査では追加mutationなし
+- external mutation: 本運用契約の作成時点ではpush、PR、merge、settings変更なし
 
 GitHubの[setup種別ガイド](https://docs.github.com/en/code-security/concepts/code-scanning/setup-types)の
 推奨どおり、まずPythonを指定したCodeQL Default setupを候補とする。Default setupで
 必要な範囲を解析できない場合だけAdvanced setupを検討する。設定変更前に人間レビューを得る。
-PUBLIC repoの各write前に`public-repo-readiness`、`repo-preflight`、本運用gateを適用する。
+PUBLIC repoの各write前に`repo-preflight`、GitHub Ops、本運用gateを適用する。

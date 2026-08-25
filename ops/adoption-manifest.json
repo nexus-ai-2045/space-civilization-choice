@@ -1,0 +1,149 @@
+{
+  "schema": "space-civilization-operational-adoption/v1",
+  "canonical_repository": "nexus-ai-2045/space-civilization-choice",
+  "reviewed_at": "2026-08-25",
+  "levels": {
+    "enforced_ci": "required CI context内で自動検査される",
+    "operator_gate": "外部操作の都度、実行receiptとread-backを要する",
+    "design_reference": "設計原則だけを採用し、runtime保証とは呼ばない",
+    "future_candidate": "導入条件が成立するまで未採用",
+    "out_of_scope": "現行product boundaryへ接続しない"
+  },
+  "entries": [
+    {
+      "id": "fractal-decision-ecosystem",
+      "source_visibility": "public",
+      "repository_url": "https://github.com/nexus-ai-2045/fractal-decision-ecosystem",
+      "adoption_level": "design_reference",
+      "reviewed_revision": "a41aff6b0e4eefe728d6177017212b89be7820e2",
+      "contract": "Goal、Evidence、Decision、Verify、Closureと事実・仮説・未知の分離",
+      "evidence_paths": ["PROJECT_GOAL.md", "docs/REUSE_MAP.md"],
+      "drift_policy": "upstream HEAD差分は通知し、reviewなしに参照revisionを更新しない"
+    },
+    {
+      "id": "engineering-brain",
+      "source_visibility": "public",
+      "repository_url": "https://github.com/nexus-ai-2045/engineering-brain",
+      "adoption_level": "design_reference",
+      "reviewed_revision": "cbd1f4cbdd83cbc09d5cf959590219288654c160",
+      "contract": "reuse-firstと実装・検証・運用保証・人間判断の分離",
+      "evidence_paths": ["docs/ROADMAP.md", "docs/REUSE_MAP.md"],
+      "drift_policy": "runtimeは未接続。導入時にrelease、license、撤去方法を再審査する"
+    },
+    {
+      "id": "github-ops-skills",
+      "source_visibility": "public",
+      "repository_url": "https://github.com/nexus-ai-2045/github-ops-skills",
+      "adoption_level": "operator_gate",
+      "reviewed_revision": "3a6688c5d9d4234317947d0358127949e6b718a1",
+      "contract": "remote、identity、visibility、承認境界、write後read-back",
+      "evidence_paths": ["docs/OPERATIONS.md", "PUBLIC_READY.md"],
+      "drift_policy": "外部write前に実行版を記録し、PUBLIC操作は人間レビューへ戻す"
+    },
+    {
+      "id": "worktree-lifecycle-control",
+      "source_visibility": "public",
+      "repository_url": "https://github.com/nexus-ai-2045/worktree-lifecycle-control",
+      "adoption_level": "operator_gate",
+      "reviewed_revision": "3f5f035a8f017503865a44a6fa57ac099d95cb12",
+      "contract": "worktreeを統合証跡のある作業資産として扱うread-only棚卸し",
+      "evidence_paths": ["docs/OPERATIONS.md"],
+      "drift_policy": "scanはcleanup許可に昇格しない。削除は別の人間承認を要する"
+    },
+    {
+      "id": "repo-preflight",
+      "source_visibility": "public",
+      "repository_url": "https://github.com/nexus-ai-2045/repo-preflight",
+      "adoption_level": "operator_gate",
+      "reviewed_revision": "35a06cc4264423951195c54ae057d82fff360c8f",
+      "contract": "push、PR、merge、公開前のfail-closed検査",
+      "evidence_paths": ["PREFLIGHT.md", "docs/OPERATIONS.md"],
+      "drift_policy": "intentごとに再実行し、needs_human_inputまたはblockedなら停止する"
+    },
+    {
+      "id": "ai-ratchet-gate",
+      "source_visibility": "public",
+      "repository_url": "https://github.com/nexus-ai-2045/ai-ratchet-gate",
+      "adoption_level": "enforced_ci",
+      "release": "v0.1.1",
+      "artifact_sha256": "b3f22ab772699d57906326e42189e0ab7a0ee9e33dcad55a90909ece35106cd7",
+      "contract": "trackedかつignoredの新規矛盾をrequired CI contextで拒否する",
+      "evidence_paths": [".github/workflows/ai-ratchet-gate.yml", ".ai-ratchet-gate/baseline.txt"],
+      "drift_policy": "releaseとhashを固定し、baseline更新は人間レビューを要する"
+    },
+    {
+      "id": "internal-workspace-boundary",
+      "source_visibility": "private_internal",
+      "adoption_level": "design_reference",
+      "contract": "親workspaceと公開product正本を分離し、公開repoをcanonicalとする",
+      "evidence_paths": ["PROJECT_SSOT.md"],
+      "drift_policy": "非公開sourceの名前、URL、revision、本文を公開treeへ投影しない"
+    },
+    {
+      "id": "internal-task-fanin-contract",
+      "source_visibility": "private_internal",
+      "adoption_level": "design_reference",
+      "contract": "goal、owner、done_when、return pathとfan-in責任を分離する",
+      "evidence_paths": ["PROJECT_GOAL.md", "docs/ROADMAP.md"],
+      "drift_policy": "内部task状態をproduct SSOTと混同しない"
+    },
+    {
+      "id": "internal-capability-maturity-model",
+      "source_visibility": "private_internal",
+      "adoption_level": "design_reference",
+      "contract": "発見、接続、試行、運用を区別し、証拠なしに運用保証へ昇格しない",
+      "evidence_paths": ["docs/adr/0007-operational-adoption-contract.md", "ops/adoption-manifest.json"],
+      "drift_policy": "公開treeには一般化した契約だけを保持する"
+    },
+    {
+      "id": "internal-feedback-ledger-contract",
+      "source_visibility": "private_internal",
+      "adoption_level": "design_reference",
+      "contract": "検証結果、未知、残務、return pathを追跡可能な証拠として残す",
+      "evidence_paths": ["PROJECT_GOAL.md", "docs/ROADMAP.md"],
+      "drift_policy": "個人logと未公開活動情報を公開成果物へ複製しない"
+    },
+    {
+      "id": "internal-deliberation-runtime",
+      "source_visibility": "private_internal",
+      "adoption_level": "future_candidate",
+      "contract": "複数agent討議runtime",
+      "evidence_paths": [],
+      "drift_policy": "決定論的fixture完成後に必要性と再現性を評価する"
+    },
+    {
+      "id": "internal-constraint-engine",
+      "source_visibility": "private_internal",
+      "adoption_level": "future_candidate",
+      "contract": "WIPとボトルネックの制約管理",
+      "evidence_paths": [],
+      "drift_policy": "実backlogと測定可能なflowができるまで導入しない"
+    },
+    {
+      "id": "internal-runtime-process-preflight",
+      "source_visibility": "private_internal",
+      "adoption_level": "future_candidate",
+      "contract": "local processと自動化のread-only preflight",
+      "evidence_paths": [],
+      "drift_policy": "常駐runtime導入時にprivacy境界と運用triggerを再評価する"
+    },
+    {
+      "id": "voice-interaction-runtime",
+      "source_visibility": "private_internal",
+      "adoption_level": "out_of_scope",
+      "contract": "音声対話runtime",
+      "evidence_paths": [],
+      "drift_policy": "現行Web simulation MVPへ接続しない"
+    },
+    {
+      "id": "note-publishing-suite",
+      "source_visibility": "public",
+      "repository_url": "https://github.com/nexus-ai-2045/note-publishing-suite",
+      "adoption_level": "out_of_scope",
+      "reviewed_revision": "5e01ddbf8e819560316549b50946b0defc9a927f",
+      "contract": "Note記事の人間承認付き公開運用",
+      "evidence_paths": [],
+      "drift_policy": "simulation productと記事公開を分離し、投稿taskが生じた場合だけ再評価する"
+    }
+  ]
+}

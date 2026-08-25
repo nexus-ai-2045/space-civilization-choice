@@ -29,8 +29,10 @@ REQUIRED_FILES = (
     "docs/ROADMAP.md",
     "docs/SIMULATION_DESIGN.md",
     "docs/RESEARCH_EVIDENCE.md",
+    "ops/adoption-manifest.json",
     "docs/adr/0005-adaptive-exploratory-decision-loop.md",
     "docs/adr/0006-separate-epistemic-provenance-validation.md",
+    "docs/adr/0007-operational-adoption-contract.md",
     "docs/adr/README.md",
 )
 
@@ -165,12 +167,14 @@ REQUIRED_LINKS = {
         "docs/RESEARCH_EVIDENCE.md",
         "docs/adr/README.md",
         "docs/REUSE_MAP.md",
+        "ops/adoption-manifest.json",
         "PUBLIC_READY.md",
     ),
     "docs/ROADMAP.md": ("../PROJECT_GOAL.md",),
     "docs/adr/README.md": (
         "0005-adaptive-exploratory-decision-loop.md",
         "0006-separate-epistemic-provenance-validation.md",
+        "0007-operational-adoption-contract.md",
     ),
 }
 
@@ -182,6 +186,14 @@ ADR_CONTRACTS = {
     ),
     "docs/adr/0006-separate-epistemic-provenance-validation.md": (
         "epistemic-provenance-validation/v1",
+    ),
+    "docs/adr/0007-operational-adoption-contract.md": (
+        "space-civilization-operational-adoption/v1",
+        "enforced_ci",
+        "operator_gate",
+        "design_reference",
+        "future_candidate",
+        "out_of_scope",
     ),
 }
 
@@ -222,6 +234,7 @@ SSOT_CANONICAL_ROWS = {
     "research_evidence": "docs/RESEARCH_EVIDENCE.md",
     "decisions": "docs/adr/README.md",
     "reuse_boundary": "docs/REUSE_MAP.md",
+    "operational_adoption": "ops/adoption-manifest.json",
     "public_readiness": "PUBLIC_READY.md",
 }
 
