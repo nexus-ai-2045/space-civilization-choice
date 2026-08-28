@@ -1,0 +1,12 @@
+{
+  "branch_id": "domestic_autonomy",
+  "canonical_output_hash": "61a5dcdcd2d6777e4decd0787340563f42b43fee67163363c4f8c1be0f0f7fa2",
+  "event_count": 4,
+  "event_log_hash": "dfb9e0be0f6b76ccaca734ad43854b4cb4a08cc8080b739f95c909c3189b5c10",
+  "exogenous_event_stream_hash": "c64554c05e01ccf8528084aae0d968f6cab8dcde08e4666a6abc262d868bf485",
+  "model_version": "phase1-rule-model-v1",
+  "scenario_snapshot_hash": "2d4e6ba483034e3f213f61893ee1566cfb399c176126000c7edae55f30aab8f9",
+  "scenario_snapshot_id": "jp-space-choice-2026-phase1-v1",
+  "schema": "space_civilization_stored_run.v1",
+  "seed": 20260828
+}

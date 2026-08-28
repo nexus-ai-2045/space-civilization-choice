@@ -1,0 +1,17 @@
+{
+  "schema": "space_civilization_run_manifest.v1",
+  "replays": [
+    {
+      "scenario_snapshot_hash": "2d4e6ba483034e3f213f61893ee1566cfb399c176126000c7edae55f30aab8f9",
+      "seed": 20260828,
+      "model_version": "phase1-rule-model-v1",
+      "canonical_output_hash": "61a5dcdcd2d6777e4decd0787340563f42b43fee67163363c4f8c1be0f0f7fa2"
+    },
+    {
+      "scenario_snapshot_hash": "2d4e6ba483034e3f213f61893ee1566cfb399c176126000c7edae55f30aab8f9",
+      "seed": 20260828,
+      "model_version": "phase1-rule-model-v1",
+      "canonical_output_hash": "61a5dcdcd2d6777e4decd0787340563f42b43fee67163363c4f8c1be0f0f7fa2"
+    }
+  ]
+}

@@ -23,7 +23,20 @@ class ProjectGoalContractTest(unittest.TestCase):
             path = destination / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             source = ROOT / relative
-            path.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+            content = source.read_text(encoding="utf-8")
+            # Mutation tests begin from the original all-unchecked design state.
+            # The repository itself may legitimately advance to active as receipts land.
+            if relative == "PROJECT_GOAL.md":
+                content = content.replace("status: active", "status: design", 1)
+                content = content.replace("- `status`: active", "- `status`: design", 1)
+                content = content.replace(
+                    "- [x] `REPLAY-001`: [receipt](evidence/done-when/REPLAY-001.json) ",
+                    "- [ ] `REPLAY-001`: ",
+                    1,
+                )
+            elif relative == "docs/PRODUCT_SPEC.md":
+                content = content.replace("status: active", "status: design", 1)
+            path.write_text(content, encoding="utf-8")
 
     def _mutated_report(self, relative: str, old: str, new: str):
         with tempfile.TemporaryDirectory() as directory:
@@ -238,7 +251,7 @@ class ProjectGoalContractTest(unittest.TestCase):
             },
         )
 
-    def test_repository_goal_contract_is_valid_but_product_is_incomplete(self) -> None:
+    def test_repository_goal_contract_is_active_but_product_is_incomplete(self) -> None:
         def unexpected_live_call(_goal_id, _evidence):
             raise AssertionError("incomplete design must not perform live readback")
 
@@ -247,9 +260,9 @@ class ProjectGoalContractTest(unittest.TestCase):
         self.assertEqual(report["schema"], "space_civilization_project_goal_check.v3")
         self.assertTrue(report["contract_valid"], report["findings"])
         self.assertEqual(report["state"], "contract_valid_product_incomplete")
-        self.assertEqual(report["goal_status"], "design")
+        self.assertEqual(report["goal_status"], "active")
         self.assertFalse(report["product_mvp_complete"])
-        self.assertEqual(report["checked_done_when_ids"], [])
+        self.assertEqual(report["checked_done_when_ids"], ["REPLAY-001"])
         self.assertFalse(report["external_actions_performed"])
 
     def test_missing_done_when_blocks_contract(self) -> None:

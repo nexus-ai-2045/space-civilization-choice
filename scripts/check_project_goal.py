@@ -93,6 +93,8 @@ DONE_WHEN_EVIDENCE_CONTRACTS: dict[str, dict[str, Any]] = {
         "artifacts": {
             "test": r"^tests/.+\.py$",
             "run_manifest": r"^(?:evidence|artifacts)/runs/.+\.json$",
+            "canonical_manifest": r"^(?:evidence|artifacts)/runs/.+/run-manifest\.json$",
+            "event_log": r"^(?:evidence|artifacts)/runs/.+/events\.jsonl$",
         },
     },
     "BRANCH-001": {
@@ -630,6 +632,25 @@ def _validate_done_when_artifact_contents(
             valid = valid and len(signatures) == 1 and len(outputs) == 1
         if not valid:
             _evidence_error(findings, goal_id, "replay_result_invalid")
+        stored = _read_json_evidence(paths["canonical_manifest"], goal_id, "canonical_manifest", findings)
+        try:
+            events = [
+                json.loads(line)
+                for line in paths["event_log"].read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            _evidence_error(findings, goal_id, "event_log_invalid_jsonl")
+            return
+        stored_valid = isinstance(stored, dict)
+        stored_valid = stored_valid and stored.get("schema") == "space_civilization_stored_run.v1"
+        stored_valid = stored_valid and stored.get("event_count") == len(events) and len(events) > 0
+        stored_valid = stored_valid and stored.get("event_log_hash") == hashlib.sha256(
+            json.dumps(events, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        stored_valid = stored_valid and _is_digest(stored.get("canonical_output_hash"))
+        if not stored_valid:
+            _evidence_error(findings, goal_id, "stored_run_artifacts_invalid")
         return
 
     if goal_id == "BRANCH-001":

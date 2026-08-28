@@ -1,9 +1,9 @@
 ---
 title: 宇宙文明の選択権 プロダクト仕様
 type: product-spec
-status: design
+status: active
 created: 2026-08-24
-updated: 2026-08-24
+updated: 2026-08-28
 owner: repository-maintainers
 goal_id: space-civilization-choice-mvp-v1
 ---
