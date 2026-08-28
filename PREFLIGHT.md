@@ -30,7 +30,7 @@
 
 - reviewer: 未実施
 - reviewed_at: 未実施
-- exact HEAD / PR diff: `d924f18b6860c898337765118704a700a8de427f`
+- exact HEAD / PR diff: `1abaf89f7c04205d5f17970f8ff1ec0a19e9fa83`
 - decision: `review_pending`
 - 外から見える内容: Phase 1の運用保証強化とTRACE-001証拠がWebから閲覧可能になる
 - 公開除外: 非公開sourceの名前、URL、revision、本文、個人log、応募情報
