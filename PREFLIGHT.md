@@ -23,14 +23,14 @@
 - [x] ai-ratchet-gate 既存0件／新規0件
 - [x] REPLAY三箇所hash一致とeventの`before + axis_deltas = after`監査
 - [x] 許可action enum、bool seed拒否、clamp必要delta拒否のnegative test
-- [ ] `repo-preflight --intent open_pr --base-ref origin/main`
+- [x] `repo-preflight --intent open_pr --base-ref origin/main` → `ready_after_confirmation` / scan `pass`（secret 0 / personal path 0 / CI config pass）
 - [ ] branch push後のexact HEAD CI、review thread、mergeability
 
 ## 人間目視
 
 - reviewer: 未実施
 - reviewed_at: 未実施
-- exact HEAD / PR diff: 未push
+- exact HEAD / PR diff: `d924f18b6860c898337765118704a700a8de427f`
 - decision: `review_pending`
 - 外から見える内容: Phase 1の運用保証強化とTRACE-001証拠がWebから閲覧可能になる
 - 公開除外: 非公開sourceの名前、URL、revision、本文、個人log、応募情報
