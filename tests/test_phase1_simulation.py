@@ -39,9 +39,10 @@ def test_different_seed_changes_seeded_exogenous_stream_and_event_log():
     assert first["final_state"] != second["final_state"]
 
 
-def test_every_axis_delta_traces_to_a_turn_rule_and_evidence():
+def test_every_axis_delta_traces_to_a_turn_rule_and_evidence_model_internal():
     result = run_simulation(load_fixture(FIXTURE))
 
+    assert len(result["trace"]) == 4
     for expected_turn, event in enumerate(result["events"], start=1):
         assert event["turn_id"] == expected_turn
         assert event["rule_id"].startswith("R-DOM-")
@@ -51,6 +52,16 @@ def test_every_axis_delta_traces_to_a_turn_rule_and_evidence():
         assert event["provenance_type"] == "deterministic_core"
         assert event["validation_state"] == "accepted_for_run"
         assert set(event["axis_deltas"]) == set(event["before"]) == set(event["after"])
+        for axis in event["before"]:
+            assert event["before"][axis] + event["axis_deltas"][axis] == event["after"][axis]
+        trace = result["trace"][expected_turn - 1]
+        assert trace["turn_id"] == expected_turn
+        assert trace["inputs"] == event["input"]
+        assert trace["action"] == event["action"]
+        assert trace["model_rule"] == event["rule_id"]
+        assert trace["evidence_refs"] == [event["evidence_ref"]]
+        assert trace["causal_scope"] == "model_internal"
+        assert trace["axis_deltas"] == event["axis_deltas"]
 
 
 def test_fixture_rejects_missing_agent_or_invalid_rounds(tmp_path):
@@ -80,6 +91,23 @@ def test_fixture_rejects_missing_exogenous_event():
         run_simulation(data)
 
 
+def test_fixture_rejects_unknown_action():
+    data = load_fixture(FIXTURE)
+    data["rounds"][0]["action"] = "launch_attack"
+
+    with pytest.raises(SimulationError, match="Phase 1 allowed action"):
+        run_simulation(data)
+
+
+@pytest.mark.parametrize("seed", [True, False])
+def test_fixture_rejects_boolean_seed(seed):
+    data = load_fixture(FIXTURE)
+    data["seed"] = seed
+
+    with pytest.raises(SimulationError, match="seed must be an integer"):
+        run_simulation(data)
+
+
 def test_runner_writes_auditable_manifest_and_jsonl_without_overwrite(tmp_path):
     output_dir = tmp_path / "run"
     completed = subprocess.run(
@@ -91,14 +119,17 @@ def test_runner_writes_auditable_manifest_and_jsonl_without_overwrite(tmp_path):
     result = json.loads(completed.stdout)
     manifest = json.loads((output_dir / "run-manifest.json").read_text(encoding="utf-8"))
     events = [json.loads(line) for line in (output_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+    trace = [json.loads(line) for line in (output_dir / "trace.jsonl").read_text(encoding="utf-8").splitlines()]
 
     assert manifest["schema"] == "space_civilization_stored_run.v1"
     assert manifest["scenario_snapshot_hash"] == result["manifest"]["scenario_snapshot_hash"]
     assert manifest["canonical_output_hash"] == result["canonical_output_hash"]
     assert manifest["event_count"] == len(events)
     assert events == result["events"]
+    assert trace == result["trace"]
     assert sha256_json(events) == manifest["event_log_hash"]
     assert len(events) == 4
+    assert all(record["causal_scope"] == "model_internal" for record in trace)
 
     duplicate = subprocess.run(
         [sys.executable, str(ROOT / "scripts/run_phase1_fixture.py"), "--output-dir", str(output_dir)],
@@ -108,10 +139,9 @@ def test_runner_writes_auditable_manifest_and_jsonl_without_overwrite(tmp_path):
     assert duplicate.returncode != 0
 
 
-def test_axis_values_are_clamped_to_contract_range():
+def test_axis_delta_that_requires_clamping_is_rejected():
     data = load_fixture(FIXTURE)
     data["rounds"][0]["axis_deltas"]["industrial_reproduction"] = 1000
 
-    result = run_simulation(data)
-
-    assert result["events"][0]["after"]["industrial_reproduction"] == 100
+    with pytest.raises(SimulationError, match="axis out of range after transition"):
+        run_simulation(data)

@@ -34,6 +34,11 @@ class ProjectGoalContractTest(unittest.TestCase):
                     "- [ ] `REPLAY-001`: ",
                     1,
                 )
+                content = content.replace(
+                    "- [x] `TRACE-001`: [receipt](evidence/done-when/TRACE-001.json) ",
+                    "- [ ] `TRACE-001`: ",
+                    1,
+                )
             elif relative == "docs/PRODUCT_SPEC.md":
                 content = content.replace("status: active", "status: design", 1)
             path.write_text(content, encoding="utf-8")
@@ -262,8 +267,64 @@ class ProjectGoalContractTest(unittest.TestCase):
         self.assertEqual(report["state"], "contract_valid_product_incomplete")
         self.assertEqual(report["goal_status"], "active")
         self.assertFalse(report["product_mvp_complete"])
-        self.assertEqual(report["checked_done_when_ids"], ["REPLAY-001"])
+        self.assertEqual(report["checked_done_when_ids"], ["REPLAY-001", "TRACE-001"])
         self.assertFalse(report["external_actions_performed"])
+
+    def test_replay_rejects_stored_hash_decoupled_from_replay_result(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            tmp_path = Path(directory)
+            self._copy_contract(tmp_path)
+            for relative in (
+                "tests/test_phase1_simulation.py",
+                "evidence/runs/phase1-replay.json",
+                "evidence/runs/phase1-domestic-autonomy-20260828-v2/run-manifest.json",
+                "evidence/runs/phase1-domestic-autonomy-20260828-v2/events.jsonl",
+                "evidence/done-when/REPLAY-001.json",
+            ):
+                source = ROOT / relative
+                target = tmp_path / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(source.read_bytes())
+
+            goal = tmp_path / "PROJECT_GOAL.md"
+            text = goal.read_text(encoding="utf-8")
+            text = text.replace("status: design", "status: active", 1)
+            text = text.replace("- `status`: design", "- `status`: active", 1)
+            text = text.replace(
+                "- [ ] `REPLAY-001`:",
+                "- [x] `REPLAY-001`: [receipt](evidence/done-when/REPLAY-001.json) ",
+                1,
+            )
+            goal.write_text(text, encoding="utf-8")
+            product = tmp_path / "docs" / "PRODUCT_SPEC.md"
+            product.write_text(
+                product.read_text(encoding="utf-8").replace(
+                    "status: design", "status: active", 1
+                ),
+                encoding="utf-8",
+            )
+
+            stored = tmp_path / "evidence/runs/phase1-domestic-autonomy-20260828-v2/run-manifest.json"
+            payload = json.loads(stored.read_text(encoding="utf-8"))
+            payload["canonical_output_hash"] = "b" * 64
+            stored.write_text(
+                json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            receipt = tmp_path / "evidence/done-when/REPLAY-001.json"
+            receipt_payload = json.loads(receipt.read_text(encoding="utf-8"))
+            receipt_payload["artifact_sha256"]["canonical_manifest"] = hashlib.sha256(
+                stored.read_bytes().replace(b"\r\n", b"\n")
+            ).hexdigest()
+            receipt.write_text(json.dumps(receipt_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            report = MODULE.build_report(tmp_path)
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "invalid_done_when_evidence",
+            {item["code"] for item in report["findings"]},
+        )
 
     def test_missing_done_when_blocks_contract(self) -> None:
         report = self._mutated_report(

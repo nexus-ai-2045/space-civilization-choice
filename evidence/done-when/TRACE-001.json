@@ -1,0 +1,19 @@
+{
+  "schema": "space_civilization_done_when_evidence.v1",
+  "done_when_id": "TRACE-001",
+  "evidence_type": "transition_trace",
+  "status": "passed",
+  "artifacts": {
+    "test": "tests/test_phase1_simulation.py",
+    "trace": "evidence/runs/phase1-domestic-autonomy-20260828-v2/trace.jsonl"
+  },
+  "artifact_sha256": {
+    "test": "d892626a753314f536c22f142bec561192d5daa3adf411716bd6a211af6d48eb",
+    "trace": "07e0390cf37ebe81a5ae610887fc60e59cf4743741e3c41c0d61134618c3e4a7"
+  },
+  "result": {
+    "record_count": 4,
+    "causal_scope": "model_internal",
+    "axis_count": 6
+  }
+}

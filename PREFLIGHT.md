@@ -2,41 +2,37 @@
 
 # 公開変更のpreflight記録
 
-- base: `origin/main@290d511b03329a89c9e1c78832a08578ed8b67d8`
-- 対象: 運用採用manifest、ADR-0007、checker、CI接続、運用文書の現状同期
-- 確認日時: `2026-08-25`
+- base: `origin/main@80df47f1115e1119a6ad62e548ae83420c36f5a5`
+- 対象: PR #3 Phase 1残ギャップのfail-closed修正（REPLAY hash結合、許可action、clamp拒否、bool seed拒否、TRACE-001）
+- 確認日時: `2026-08-28`
 - 判定: `local_validation_in_progress`
 - external mutation: なし
 
 ## baseで確認済み
 
 - [x] repositoryは`PUBLIC`、default branchは`main`
-- [x] main exact HEADは`290d511b03329a89c9e1c78832a08578ed8b67d8`
-- [x] main CI run `32686326484`でrequired 4 context成功
-- [x] active main ruleset `21258820`とrequired contextをread-back
-- [x] 公開基盤と非公開内部基盤を分離し、非公開source identityは公開成果物へ入れない
-- [x] 独立worktreeとnon-default branchで作業
+- [x] 作業branchは既存PR #3の`codex/phase1-deterministic-fixture`
+- [x] 新規OS・新規ゴールを発明せず、`PROJECT_GOAL.md`のPhase 1完了条件へ前進
+- [x] Fractal Decision Ecosystem（FDE）は`design_reference`として再利用（runtime保証ではない）
+- [x] `repo-preflight`と`ai-ratchet-gate`を再実行する
 
 ## この変更で検証するもの
 
-- [x] unit test 40件とproject goal checker
+- [x] unit/pytest（53件）とproject goal checker（REPLAY-001 + TRACE-001）
 - [x] operational adoption checker `operational_contract_valid`
-- [x] workflow設定検査とPython compile
 - [x] ai-ratchet-gate 既存0件／新規0件
-- [x] target diffのsecret候補0件、個人path 0件
-- [ ] commit後の履歴とMarkdown linkを再検査
+- [x] REPLAY三箇所hash一致とeventの`before + axis_deltas = after`監査
+- [x] 許可action enum、bool seed拒否、clamp必要delta拒否のnegative test
 - [ ] `repo-preflight --intent open_pr --base-ref origin/main`
-- [ ] final exact diffの人間レビュー
 - [ ] branch push後のexact HEAD CI、review thread、mergeability
 
 ## 人間目視
 
 - reviewer: 未実施
 - reviewed_at: 未実施
-- exact HEAD / PR diff: 未commit・未push
+- exact HEAD / PR diff: 未push
 - decision: `review_pending`
-- 外から見える内容: branchをpushすると、採用level、公開基盤のURLとreview済みrevision、
-  ADR-0007、checker、テスト、更新した運用文書がWebから閲覧可能になる
+- 外から見える内容: Phase 1の運用保証強化とTRACE-001証拠がWebから閲覧可能になる
 - 公開除外: 非公開sourceの名前、URL、revision、本文、個人log、応募情報
-- 残余リスク: 上流drift、operator gateの実行漏れ、設計参照をruntime保証と誤読すること
-- 次の停止線: final exact diffと全検査結果を提示し、PUBLIC branch push／PRの明示承認を得る
+- 残余リスク: Phase 2の三分岐未実装、model card未固定、設計参照をruntime保証と誤読すること
+- 次の停止線: push後CIと独立reviewを回収し、merge判断は人間が行う（本PRはmergeしない）

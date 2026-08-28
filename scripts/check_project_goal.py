@@ -610,6 +610,7 @@ def _validate_done_when_artifact_contents(
         replays = manifest.get("replays")
         valid = manifest.get("schema") == "space_civilization_run_manifest.v1"
         valid = valid and isinstance(replays, list) and len(replays) >= 2
+        replay_output: str | None = None
         if valid:
             signatures: set[tuple[Any, Any, Any]] = set()
             outputs: set[str] = set()
@@ -630,8 +631,11 @@ def _validate_done_when_artifact_contents(
                 else:
                     outputs.add(output_hash)
             valid = valid and len(signatures) == 1 and len(outputs) == 1
+            if valid:
+                replay_output = next(iter(outputs))
         if not valid:
             _evidence_error(findings, goal_id, "replay_result_invalid")
+            return
         stored = _read_json_evidence(paths["canonical_manifest"], goal_id, "canonical_manifest", findings)
         try:
             events = [
@@ -642,13 +646,41 @@ def _validate_done_when_artifact_contents(
         except (OSError, UnicodeError, json.JSONDecodeError):
             _evidence_error(findings, goal_id, "event_log_invalid_jsonl")
             return
+        receipt_result = receipt.get("result")
+        receipt_hash = (
+            receipt_result.get("canonical_output_hash")
+            if isinstance(receipt_result, dict)
+            else None
+        )
         stored_valid = isinstance(stored, dict)
         stored_valid = stored_valid and stored.get("schema") == "space_civilization_stored_run.v1"
         stored_valid = stored_valid and stored.get("event_count") == len(events) and len(events) > 0
         stored_valid = stored_valid and stored.get("event_log_hash") == hashlib.sha256(
             json.dumps(events, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
-        stored_valid = stored_valid and _is_digest(stored.get("canonical_output_hash"))
+        # 運用保証: replay / stored manifest / receipt result の三箇所が同一hashであること。
+        stored_valid = stored_valid and stored.get("canonical_output_hash") == replay_output
+        stored_valid = stored_valid and receipt_hash == replay_output
+        if stored_valid:
+            for event in events:
+                if not isinstance(event, dict):
+                    stored_valid = False
+                    break
+                before = event.get("before")
+                after = event.get("after")
+                deltas = event.get("axis_deltas")
+                if not isinstance(before, dict) or not isinstance(after, dict) or not isinstance(deltas, dict):
+                    stored_valid = False
+                    break
+                if set(before) != set(after) or set(before) != set(deltas) or len(before) != 6:
+                    stored_valid = False
+                    break
+                for axis, value in before.items():
+                    if value + deltas[axis] != after[axis]:
+                        stored_valid = False
+                        break
+                if not stored_valid:
+                    break
         if not stored_valid:
             _evidence_error(findings, goal_id, "stored_run_artifacts_invalid")
         return
@@ -1101,7 +1133,7 @@ def _validate_done_when_evidence(
             continue
         resolved_artifacts[role] = resolved
         artifact_bytes = resolved.read_bytes()
-        if role in {"canonical_manifest", "event_log"}:
+        if role in {"canonical_manifest", "event_log", "trace"}:
             artifact_bytes = artifact_bytes.replace(b"\r\n", b"\n")
         actual_hash = hashlib.sha256(artifact_bytes).hexdigest()
         expected_hash = artifact_hashes.get(role)

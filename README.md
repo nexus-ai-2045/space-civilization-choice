@@ -109,15 +109,16 @@ flowchart LR
 | Phase | 成果物 | 状態 |
 |---|---|---|
 | **0 公開設計** | ゴール、仕様、ADR、根拠台帳、安全境界 | **main公開済み／運用契約更新はreview待ち** |
-| **1 決定論的fixture** | 状態schema、event log、同一seed replay | **進行中（一分岐replay実装済み）** |
+| **1 決定論的fixture** | 状態schema、event log、同一seed replay | **完了条件達成（一分岐replay＋trace）** |
 | **2 三分岐比較** | 共通外生event、六観測軸、感度分析 | 未着手 |
 | **3 UI** | 分岐比較、モデル内因果trace、証拠台帳 | 未着手 |
 | **4 限定LLM** | schema検証された行動提案 | 未着手 |
 | **5 demo評価** | 人間レビュー、説明可能性eval | 未着手 |
 
 Phase 1として、国内自立型の1 branch × 4 round fixtureをLLMなしで再生し、同一入力の
-canonical output hash一致まで実装しました。次は同じschemaで三技術ツリーを比較できるよう、
-共通外生event列とmodel cardを固定します。詳細は[ロードマップ](docs/ROADMAP.md)を参照してください。
+canonical output hash一致と六軸deltaのmodel_internal traceまで実装しました。次は同じschemaで
+三技術ツリーを比較できるよう、共通外生event列とmodel cardを固定します。詳細は
+[ロードマップ](docs/ROADMAP.md)を参照してください。
 
 ## 設計を読む
 
@@ -141,7 +142,7 @@ canonical output hash一致まで実装しました。次は同じschemaで三�
 プロダクトは未実装ですが、ゴール契約と公開境界は検査できます。
 
 ```powershell
-py -3.13 -m unittest discover -s tests -p "test_*.py"
+py -3.13 -m pytest -q
 py -3.13 scripts/check_project_goal.py --json
 py -3.13 scripts/run_phase1_fixture.py
 py -3.13 scripts/check_operational_adoption.py --json
@@ -150,8 +151,9 @@ $ratchet = Join-Path $env:APPDATA 'Python\Python313\Scripts\ai-ratchet-gate.exe'
 & $ratchet --repo .
 ```
 
-fixture runnerはmanifest、4件のevent、event log hash、canonical output hashをJSONで返します。
-これは一分岐の再現性だけを示し、三分岐比較、プロダクトMVPの完成、公開許可を意味しません。
+fixture runnerはmanifest、4件のevent、event log hash、canonical output hash、model_internal
+traceをJSONで返します。これは一分岐の再現性とtraceだけを示し、三分岐比較、プロダクトMVPの完成、
+公開許可を意味しません。
 
 ## 制約
 

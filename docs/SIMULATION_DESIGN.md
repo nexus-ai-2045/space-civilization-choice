@@ -74,6 +74,9 @@ sampling法、interaction見落としのnegative test、停止条件をensemble 
 各ラウンドで選べる行動は、資金配分、共同研究、調達、標準提案、知財公開、技能育成、
 国際協力、冗長化である。行動には予算・人材・時間の上限を置き、同時にすべてを最大化できない。
 
+Phase 1の決定論的fixtureでは、この動詞集合をdomestic fixture向けの許可action enumへ射影し、
+未知のaction文字列を`accepted_for_run`として記録しない。許可外のactionはfail-closedで拒否する。
+
 ## 状態遷移
 
 決定論的コアが、入力状態、選択された行動、seed付き外生イベントから次状態を計算する。

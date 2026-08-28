@@ -10,7 +10,7 @@
     "event_log": "evidence/runs/phase1-domestic-autonomy-20260828-v2/events.jsonl"
   },
   "artifact_sha256": {
-    "test": "1ec39c239cf8ba0e05b2c8050b337aaf53b1fa7e7b150e65584b602c7260beca",
+    "test": "d892626a753314f536c22f142bec561192d5daa3adf411716bd6a211af6d48eb",
     "run_manifest": "d411b9876c92d6438c8a97e6661eacb4e56dabb90f8911e338651b3f7afd8e7b",
     "canonical_manifest": "d68f45b294ddafffd4ba1383633df9444514e47543f5cb4085373323fff7aa0a",
     "event_log": "4c8a3adcc5f68cb82807530c1af25626493c857b5d11fac6be915153ae5eed12"

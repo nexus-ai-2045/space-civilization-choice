@@ -19,8 +19,9 @@ phase完了はプロダクトMVP完了、公開承認、merge承認を意味し�
 
 完了条件: LLMなしで一分岐を再生でき、状態差分をturn IDへ遡れる。
 
-状態: **進行中**。国内自立型の一分岐・4ラウンドfixture、上書き拒否するJSONL event log、同一入力の
-canonical hash一致まで実装済み。branch-neutral schemaの固定とmodel card初版はPhase 2着手前に行う。
+状態: **完了条件達成**。国内自立型の一分岐・4ラウンドfixture、上書き拒否するJSONL event log、同一入力の
+canonical hash一致、六軸deltaのmodel_internal traceまで実装済み。完了はMVP完成や公開承認を意味しない。
+branch-neutral schemaの固定とmodel card初版はPhase 2着手前に行う。
 
 ## Phase 2: 残る二分岐と三分岐比較
 

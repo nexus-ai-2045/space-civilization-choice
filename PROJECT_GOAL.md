@@ -74,7 +74,7 @@ goal_id: space-civilization-choice-mvp-v1
 - [ ] `GOAL-001`: 本文書、README、プロダクト仕様のゴール・非目標・ownerが矛盾しない
 - [x] `REPLAY-001`: [receipt](evidence/done-when/REPLAY-001.json) 同一のsnapshot hash、seed、model versionを二回実行し、canonical output hashが一致する
 - [ ] `BRANCH-001`: 三分岐が同一snapshot hash、seed、exogenous event stream hashから生成され、分岐固有の全event logがそれぞれのevent log hashで検証できる
-- [ ] `TRACE-001`: 六軸の各deltaをturn ID、入力、行動、モデル規則、evidence refへ遡れ、実世界の因果とモデル内部遷移を区別できる
+- [x] `TRACE-001`: [receipt](evidence/done-when/TRACE-001.json) 六軸の各deltaをturn ID、入力、行動、モデル規則、evidence refへ遡れ、実世界の因果とモデル内部遷移を区別できる
 - [ ] `CLASS-001`: 全claim／提案に`record_kind`、`epistemic_class`、`provenance_type`、`validation_state`があり、不整合な組合せが0になる
 - [ ] `MODEL-001`: 全数値係数に単位、範囲、根拠、更新式、感度、反証条件がある
 - [ ] `ROBUST-001`: XLRM、performance threshold、ensemble manifest、robustness／regret定義を固定し、脆弱性条件と選択肢喪失条件をholdoutで再確認できる
@@ -86,7 +86,7 @@ goal_id: space-civilization-choice-mvp-v1
 ## 現在の達成状態
 
 - `status`: active
-- Phase 1の一分岐fixtureと決定論的replay testを実装済み
+- Phase 1の一分岐fixture、決定論的replay、model_internal traceを実装済み
 - 三分岐比較、外生event共有、model card、感度分析、UIは未実装
 - 上記チェック項目は、対応する一次証拠が揃うまで未完了のまま保持する
 

@@ -41,6 +41,10 @@ def main() -> int:
                 "".join(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n" for event in result["events"]),
                 encoding="utf-8",
             )
+            (temp_path / "trace.jsonl").write_text(
+                "".join(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n" for record in result["trace"]),
+                encoding="utf-8",
+            )
             temp_path.replace(args.output_dir)
     print(json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2))
     return 0

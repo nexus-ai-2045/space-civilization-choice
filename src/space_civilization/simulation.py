@@ -25,6 +25,15 @@ AGENTS = (
     "research_and_next_generation_alliance",
     "international_partners",
 )
+# Phase 1で許可する行動。SIMULATION_DESIGNの動詞集合をdomestic fixtureへ射影したfail-closed enum。
+PHASE1_ALLOWED_ACTIONS = frozenset(
+    {
+        "allocate_to_domestic_core_components",
+        "qualify_redundant_component_supply",
+        "expand_maintainer_training",
+        "operate_with_domestic_maintenance_chain",
+    }
+)
 CLASSIFICATION = {
     "record_kind": "simulated_transition",
     "epistemic_class": "model_assumption",
@@ -41,6 +50,11 @@ EXOGENOUS_EVENT_AXES = {
 
 class SimulationError(ValueError):
     """fixtureまたは状態遷移契約に違反した。"""
+
+
+def _is_int(value: Any) -> bool:
+    """JSON boolはintのsubclassなので、厳密な整数だけを受理する。"""
+    return type(value) is int
 
 
 def canonical_json(value: Any) -> str:
@@ -64,7 +78,7 @@ def validate_fixture(data: dict[str, Any]) -> None:
         raise SimulationError(f"fixture required fields missing: {missing}")
     if data["branch"] not in {"international_integration", "domestic_autonomy", "open_platform"}:
         raise SimulationError("unknown technology branch")
-    if not isinstance(data["seed"], int):
+    if not _is_int(data["seed"]):
         raise SimulationError("seed must be an integer")
     if [item.get("year") for item in data["rounds"]] != list(ROUNDS):
         raise SimulationError(f"rounds must be {list(ROUNDS)}")
@@ -74,11 +88,13 @@ def validate_fixture(data: dict[str, Any]) -> None:
     if set(state.get("agents", {})) != set(AGENTS):
         raise SimulationError("initial_state.agents must contain the five canonical agents")
     for axis, value in state["axes"].items():
-        if not isinstance(value, int) or not 0 <= value <= 100:
+        if not _is_int(value) or not 0 <= value <= 100:
             raise SimulationError(f"axis out of range: {axis}")
     for index, item in enumerate(data["rounds"], start=1):
         if not item.get("action") or not item.get("rule_id") or not item.get("evidence_ref"):
             raise SimulationError(f"round {index} lacks trace fields")
+        if item.get("action") not in PHASE1_ALLOWED_ACTIONS:
+            raise SimulationError(f"round {index} action is not a Phase 1 allowed action")
         if item.get("actor") not in AGENTS:
             raise SimulationError(f"round {index} actor is not a canonical agent")
         if not isinstance(item.get("exogenous_event"), str) or not item["exogenous_event"].strip():
@@ -86,12 +102,19 @@ def validate_fixture(data: dict[str, Any]) -> None:
         if item["exogenous_event"] not in EXOGENOUS_EVENT_AXES:
             raise SimulationError(f"round {index} exogenous_event has no canonical transition rule")
         deltas = item.get("axis_deltas", {})
-        if set(deltas) != set(AXES) or any(not isinstance(v, int) for v in deltas.values()):
+        if set(deltas) != set(AXES) or any(not _is_int(v) for v in deltas.values()):
             raise SimulationError(f"round {index} axis_deltas invalid")
 
 
 def _apply_deltas(axes: dict[str, int], deltas: dict[str, int]) -> dict[str, int]:
-    return {axis: max(0, min(100, axes[axis] + deltas[axis])) for axis in AXES}
+    """実適用deltaを加算する。範囲外へ出る入力はfail-closedで拒否する。"""
+    after: dict[str, int] = {}
+    for axis in AXES:
+        value = axes[axis] + deltas[axis]
+        if not 0 <= value <= 100:
+            raise SimulationError(f"axis out of range after transition: {axis}")
+        after[axis] = value
+    return after
 
 
 def _deterministic_draw(seed: int, year: int, exogenous_event: str) -> float:
@@ -104,6 +127,24 @@ def _deterministic_draw(seed: int, year: int, exogenous_event: str) -> float:
 def _realize_exogenous_effect(event: str, random_draw: float) -> dict[str, int | str]:
     modifier = -1 if random_draw < 1 / 3 else 0 if random_draw < 2 / 3 else 1
     return {"axis": EXOGENOUS_EVENT_AXES[event], "modifier": modifier}
+
+
+def build_model_internal_trace(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """event logからTRACE-001用のmodel_internal投影を作る。"""
+    records: list[dict[str, Any]] = []
+    for event in events:
+        records.append(
+            {
+                "turn_id": event["turn_id"],
+                "inputs": deepcopy(event["input"]),
+                "action": event["action"],
+                "model_rule": event["rule_id"],
+                "evidence_refs": [event["evidence_ref"]],
+                "causal_scope": "model_internal",
+                "axis_deltas": deepcopy(event["axis_deltas"]),
+            }
+        )
+    return records
 
 
 def run_simulation(fixture: dict[str, Any]) -> dict[str, Any]:
@@ -161,5 +202,7 @@ def run_simulation(fixture: dict[str, Any]) -> dict[str, Any]:
         )
     event_log_hash = sha256_json(events)
     result = {"manifest": manifest, "final_state": state, "events": events, "event_log_hash": event_log_hash}
+    # hash対象はPhase 1のstored run契約（manifest/state/events）に固定する。
     result["canonical_output_hash"] = sha256_json(result)
+    result["trace"] = build_model_internal_trace(events)
     return result
