@@ -24,13 +24,14 @@
 - [x] REPLAY三箇所hash一致とeventの`before + axis_deltas = after`監査
 - [x] 許可action enum、bool seed拒否、clamp必要delta拒否のnegative test
 - [x] `repo-preflight --intent open_pr --base-ref origin/main` → `ready_after_confirmation` / scan `pass`（secret 0 / personal path 0 / CI config pass）
-- [ ] branch push後のexact HEAD CI、review thread、mergeability
+- [x] branch push後のexact HEAD CI: `391c12895e8bd13585e689786b6c747d0cae138b` で required 4 context成功（secret-scan / goal-contract / ratchet ubuntu / ratchet windows）
+- [ ] review thread回収と人間のmerge判断（本PRはmergeしない）
 
 ## 人間目視
 
 - reviewer: 未実施
 - reviewed_at: 未実施
-- exact HEAD / PR diff: `7e2924d176a48688b78d651ad9710da0f6a29bef`
+- exact HEAD / PR diff: `391c12895e8bd13585e689786b6c747d0cae138b`
 - decision: `review_pending`
 - 外から見える内容: Phase 1の運用保証強化とTRACE-001証拠がWebから閲覧可能になる
 - 公開除外: 非公開sourceの名前、URL、revision、本文、個人log、応募情報
