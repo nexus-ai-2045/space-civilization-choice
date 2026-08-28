@@ -39,6 +39,11 @@ class ProjectGoalContractTest(unittest.TestCase):
                     "- [ ] `TRACE-001`: ",
                     1,
                 )
+                content = content.replace(
+                    "- [x] `CI-001`: [receipt](evidence/done-when/CI-001.json) ",
+                    "- [ ] `CI-001`: ",
+                    1,
+                )
             elif relative == "docs/PRODUCT_SPEC.md":
                 content = content.replace("status: active", "status: design", 1)
             path.write_text(content, encoding="utf-8")
@@ -257,17 +262,33 @@ class ProjectGoalContractTest(unittest.TestCase):
         )
 
     def test_repository_goal_contract_is_active_but_product_is_incomplete(self) -> None:
-        def unexpected_live_call(_goal_id, _evidence):
-            raise AssertionError("incomplete design must not perform live readback")
+        ci_receipt = json.loads(
+            (ROOT / "evidence/ci/phase1-exact-head-ecde21d.json").read_text(encoding="utf-8")
+        )
 
-        report = MODULE.build_report(ROOT, live_verifier=unexpected_live_call)
+        def live_verifier(goal_id, evidence):
+            if goal_id != "CI-001":
+                raise AssertionError(f"unexpected live readback for {goal_id}")
+            self.assertEqual(evidence.get("head_sha"), ci_receipt["head_sha"])
+            return {
+                "repository": MODULE.CANONICAL_REPOSITORY,
+                "head_sha": ci_receipt["head_sha"],
+                "conclusion": "success",
+                "run_url": ci_receipt["run_url"],
+                "jobs": {job: "success" for job in MODULE.REQUIRED_CI_JOBS},
+            }
+
+        report = MODULE.build_report(ROOT, live_verifier=live_verifier)
 
         self.assertEqual(report["schema"], "space_civilization_project_goal_check.v3")
         self.assertTrue(report["contract_valid"], report["findings"])
         self.assertEqual(report["state"], "contract_valid_product_incomplete")
         self.assertEqual(report["goal_status"], "active")
         self.assertFalse(report["product_mvp_complete"])
-        self.assertEqual(report["checked_done_when_ids"], ["REPLAY-001", "TRACE-001"])
+        self.assertEqual(
+            report["checked_done_when_ids"],
+            ["CI-001", "REPLAY-001", "TRACE-001"],
+        )
         self.assertFalse(report["external_actions_performed"])
 
     def test_replay_rejects_stored_hash_decoupled_from_replay_result(self) -> None:
@@ -524,6 +545,50 @@ class ProjectGoalContractTest(unittest.TestCase):
             "ci_live_readback_mismatch",
             {item.get("reason") for item in report["findings"]},
         )
+
+    def test_ci_receipt_may_bind_to_ancestor_exact_head(self) -> None:
+        ancestor = "a" * 40
+        tip = "b" * 40
+        with tempfile.TemporaryDirectory() as directory:
+            tmp_path = Path(directory)
+            self._copy_contract(tmp_path)
+            self._activate_done_when(tmp_path, "CI-001")
+            run_url = self._write_ci_evidence(tmp_path, ancestor)
+
+            report = MODULE.build_report(
+                tmp_path,
+                head_resolver=lambda _: tip,
+                live_verifier=lambda _goal_id, _evidence: {
+                    "repository": MODULE.CANONICAL_REPOSITORY,
+                    "head_sha": ancestor,
+                    "conclusion": "success",
+                    "run_url": run_url,
+                    "jobs": {job: "success" for job in MODULE.REQUIRED_CI_JOBS},
+                },
+            )
+            # TemporaryDirectory is not a git repo; ancestor check fails closed.
+            self.assertFalse(report["contract_valid"])
+
+        with tempfile.TemporaryDirectory() as directory:
+            tmp_path = Path(directory)
+            self._copy_contract(tmp_path)
+            self._activate_done_when(tmp_path, "CI-001")
+            run_url = self._write_ci_evidence(tmp_path, tip)
+
+            report = MODULE.build_report(
+                tmp_path,
+                head_resolver=lambda _: tip,
+                live_verifier=lambda _goal_id, _evidence: {
+                    "repository": MODULE.CANONICAL_REPOSITORY,
+                    "head_sha": tip,
+                    "conclusion": "success",
+                    "run_url": run_url,
+                    "jobs": {job: "success" for job in MODULE.REQUIRED_CI_JOBS},
+                },
+            )
+
+        self.assertTrue(report["contract_valid"], report["findings"])
+        self.assertIn("CI-001", report["checked_done_when_ids"])
 
     def test_public_requires_validated_ci_and_human_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

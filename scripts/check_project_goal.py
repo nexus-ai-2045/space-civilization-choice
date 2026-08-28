@@ -385,6 +385,28 @@ def _resolve_git_head(repo: Path) -> str:
     return head_sha
 
 
+def _git_is_ancestor(repo: Path, maybe_ancestor: str, head: str) -> bool:
+    """maybe_ancestor が head と同一、またはその祖先なら True。"""
+    if maybe_ancestor == head:
+        return True
+    completed = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "merge-base",
+            "--is-ancestor",
+            maybe_ancestor,
+            head,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    return completed.returncode == 0
+
+
 def _scan_tracked_personal_paths(repo: Path) -> tuple[bool, list[str]]:
     """cleanなHEADのtracked textだけを上限付きで直接走査する。"""
     clean = subprocess.run(
@@ -916,6 +938,7 @@ def _validate_done_when_artifact_contents(
         except (OSError, subprocess.SubprocessError, ValueError):
             inspected_head = ""
         expected_run_url = ""
+        receipt_head = ""
         if isinstance(receipt_data, dict):
             run_url = receipt_data.get("run_url")
             match = re.fullmatch(
@@ -926,10 +949,23 @@ def _validate_done_when_artifact_contents(
                 expected_run_url = (
                     f"{CANONICAL_REPOSITORY_URL}/actions/runs/{match.group('run_id')}"
                 )
-        valid = bool(inspected_head) and isinstance(receipt_data, dict) and (
+            raw_head = receipt_data.get("head_sha")
+            if isinstance(raw_head, str):
+                receipt_head = raw_head.lower()
+        # 記録する exact HEAD の CI 成功を live で検証する。
+        # 証拠を追加した後続 commit でも、記録 HEAD が現 HEAD の祖先なら受理する
+        # （証拠 commit 自身の SHA を事前埋め込みできない鶏卵を避ける）。
+        head_bound = bool(inspected_head) and _is_digest(receipt_head, length=40)
+        if head_bound and receipt_head != inspected_head:
+            try:
+                head_bound = _git_is_ancestor(repo, receipt_head, inspected_head)
+            except (OSError, subprocess.SubprocessError, ValueError):
+                head_bound = False
+        valid = head_bound and isinstance(receipt_data, dict) and (
             receipt_data.get("schema") == "space_civilization_ci_receipt.v1"
             and receipt_data.get("repository") == CANONICAL_REPOSITORY
-            and receipt_data.get("head_sha") == inspected_head
+            and isinstance(receipt_data.get("head_sha"), str)
+            and receipt_data.get("head_sha").lower() == receipt_head
             and receipt_data.get("conclusion") == "success"
             and isinstance(receipt_data.get("jobs"), dict)
             and all(
@@ -948,7 +984,8 @@ def _validate_done_when_artifact_contents(
             return
         live_valid = isinstance(live, dict) and (
             live.get("repository") == CANONICAL_REPOSITORY
-            and live.get("head_sha") == inspected_head
+            and isinstance(live.get("head_sha"), str)
+            and live.get("head_sha").lower() == receipt_head
             and live.get("conclusion") == "success"
             and live.get("run_url") == expected_run_url
             and isinstance(live.get("jobs"), dict)
