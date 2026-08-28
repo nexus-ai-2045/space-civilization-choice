@@ -12,8 +12,8 @@
   "artifact_sha256": {
     "test": "1ec39c239cf8ba0e05b2c8050b337aaf53b1fa7e7b150e65584b602c7260beca",
     "run_manifest": "d411b9876c92d6438c8a97e6661eacb4e56dabb90f8911e338651b3f7afd8e7b",
-    "canonical_manifest": "7bdd219166b20799f6a2620f55df01e9522e448f34945c3d215c9033b342bfcb",
-    "event_log": "ee2020cae4d3fdacb3c935441efa26e3a68785de3a21d098c89e257b91346103"
+    "canonical_manifest": "d68f45b294ddafffd4ba1383633df9444514e47543f5cb4085373323fff7aa0a",
+    "event_log": "4c8a3adcc5f68cb82807530c1af25626493c857b5d11fac6be915153ae5eed12"
   },
   "result": {
     "replay_count": 2,

@@ -1100,7 +1100,10 @@ def _validate_done_when_evidence(
             )
             continue
         resolved_artifacts[role] = resolved
-        actual_hash = hashlib.sha256(resolved.read_bytes()).hexdigest()
+        artifact_bytes = resolved.read_bytes()
+        if role in {"canonical_manifest", "event_log"}:
+            artifact_bytes = artifact_bytes.replace(b"\r\n", b"\n")
+        actual_hash = hashlib.sha256(artifact_bytes).hexdigest()
         expected_hash = artifact_hashes.get(role)
         if not _is_digest(expected_hash) or expected_hash != actual_hash:
             _evidence_error(
