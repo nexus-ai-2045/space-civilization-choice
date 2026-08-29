@@ -9,12 +9,15 @@ from pathlib import Path
 from typing import Any
 
 from .ai_advisor import propose_action
+from .adaptive_loop import run_adaptive_simulation
 from .comparison import BRANCHES, compare_simulations
+from .parameter_registry import ParameterError, expand_preset
 from .simulation import apply_action_effect, load_fixture, sha256_json
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WEB_ROOT = REPO_ROOT / "web"
+FRONTEND_ROOT = REPO_ROOT / "frontend" / "dist"
 FIXTURES = {
     "international_integration": REPO_ROOT / "fixtures/phase1_international_cooperation.json",
     "domestic_autonomy": REPO_ROOT / "fixtures/phase1_domestic_autonomy.json",
@@ -52,20 +55,101 @@ def build_demo_result() -> dict[str, Any]:
     return result
 
 
+AXIS_PRESENTATION = {
+    "access_and_operation": ("到達・運用", "#ffbf3f"),
+    "industrial_reproduction": ("産業再生産", "#24b8ff"),
+    "rule_shaping": ("ルール形成", "#9f75ff"),
+    "knowledge_continuity": ("知識継承", "#37d3c3"),
+    "relationship_choice": ("関係選択", "#ff805d"),
+    "public_legitimacy": ("公的正統性", "#c68cff"),
+}
+
+ACTION_PRESENTATION = {
+    "fund_transport": "宇宙輸送へ重点投資",
+    "deploy_autonomy": "自律運用を展開",
+    "harden_life_support": "生命維持を強靭化",
+    "build_energy_capacity": "宇宙エネルギーを増強",
+    "localize_supply": "供給網を国内化",
+    "train_people": "宇宙人材を育成",
+    "negotiate_standards": "国際標準を共同形成",
+    "open_interfaces": "接続仕様を開放",
+}
+
+
+def build_adaptive_demo(parameters: dict[str, int] | None = None, *, seed: int = 20260829) -> dict[str, Any]:
+    result = run_adaptive_simulation(expand_preset("balanced") if parameters is None else parameters, seed=seed)
+    last = result["rounds"][-1]
+    accepted = {item["agent_id"] for item in last["accepted_actions"]}
+    proposal_rows = [
+        {
+            "agent": item["agent_id"],
+            "title": ACTION_PRESENTATION[item["action_id"]],
+            "accepted": item["agent_id"] in accepted,
+            "score": 1 if item["agent_id"] in accepted else 0,
+        }
+        for item in last["proposals"]
+    ]
+    trace_rows = []
+    for round_item in result["rounds"]:
+        accepted_ids = ", ".join(item["action_id"] for item in round_item["accepted_actions"]) or "採択なし"
+        trace_rows.append(f'{round_item["year"]}: {accepted_ids}')
+        trace_rows.extend(
+            f'{round_item["year"]}: {event["rule_id"]} {event["axis"]} {event["delta"]:+d}'
+            for event in round_item["uncertainty_events"]
+        )
+    return {
+        "schema": "space_civilization_web_demo.v2",
+        "round": 4,
+        "year": 2040,
+        "decision_engine": "deterministic_local_v1",
+        "axes": [
+            {"id": axis, "label": AXIS_PRESENTATION[axis][0], "value": value, "color": AXIS_PRESENTATION[axis][1]}
+            for axis, value in result["final_axes"].items()
+        ],
+        "proposals": proposal_rows,
+        "trace": trace_rows,
+        "canonical_output_hash": result["canonical_output_hash"],
+        "simulation": result,
+    }
+
+
 class DemoHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, directory=str(WEB_ROOT), **kwargs)
+        static_root = FRONTEND_ROOT if (FRONTEND_ROOT / "index.html").is_file() else WEB_ROOT
+        super().__init__(*args, directory=str(static_root), **kwargs)
 
     def do_POST(self) -> None:  # noqa: N802
         if self.path != "/api/simulate":
             self.send_error(404)
             return
         try:
-            payload = json.dumps(build_demo_result(), ensure_ascii=False).encode("utf-8")
+            length = int(self.headers.get("Content-Length", "0"))
+            if length < 0 or length > 32_768:
+                raise ParameterError("request body size is invalid")
+            raw = self.rfile.read(length) if length else b"{}"
+            request_body = json.loads(raw.decode("utf-8"))
+            if not isinstance(request_body, dict) or set(request_body) - {"parameters", "rounds", "seed"}:
+                raise ParameterError("request object contains unknown fields")
+            if request_body.get("rounds", 4) != 4:
+                raise ParameterError("rounds must be 4")
+            seed = request_body.get("seed", 20260829)
+            if type(seed) is not int:
+                raise ParameterError("seed must be a strict integer")
+            parameters = request_body.get("parameters")
+            if parameters is not None and not isinstance(parameters, dict):
+                raise ParameterError("parameters must be an object")
+            payload = json.dumps(build_adaptive_demo(parameters, seed=seed), ensure_ascii=False).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(payload)))
             self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(payload)
+        except (ParameterError, UnicodeError, json.JSONDecodeError, ValueError):
+            payload = json.dumps({"error": "invalid_simulation_request"}).encode("utf-8")
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
         except Exception:
