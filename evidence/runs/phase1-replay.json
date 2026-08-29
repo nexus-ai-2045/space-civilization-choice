@@ -3,15 +3,17 @@
   "replays": [
     {
       "scenario_snapshot_hash": "324182e2a85978a261bf865a58b24c7a6de88e8b572c863c1aa3371f5b030724",
+      "deterministic_execution_input_hash": "adb81b189dfa4bc5806b1982871641ebc0844a1e0ce26ea91e9bfa1b40baa4ac",
       "seed": 20260828,
       "model_version": "phase1-rule-model-v1",
-      "canonical_output_hash": "a37bf8360934fd70fe1b36a1703fa6171c21ac51bc9b1c59c031062a5b0c18fe"
+      "canonical_output_hash": "ee445d571bce80e7e1f3b0d890de80e67fafd4bc09d806131b08edf65f878dcc"
     },
     {
       "scenario_snapshot_hash": "324182e2a85978a261bf865a58b24c7a6de88e8b572c863c1aa3371f5b030724",
+      "deterministic_execution_input_hash": "adb81b189dfa4bc5806b1982871641ebc0844a1e0ce26ea91e9bfa1b40baa4ac",
       "seed": 20260828,
       "model_version": "phase1-rule-model-v1",
-      "canonical_output_hash": "a37bf8360934fd70fe1b36a1703fa6171c21ac51bc9b1c59c031062a5b0c18fe"
+      "canonical_output_hash": "ee445d571bce80e7e1f3b0d890de80e67fafd4bc09d806131b08edf65f878dcc"
     }
   ]
 }

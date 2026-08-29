@@ -80,6 +80,9 @@ def test_scenario_snapshot_hash_binds_shared_inputs_only(field, replacement, has
     else:
         assert first["manifest"]["scenario_snapshot_hash"] == second["manifest"]["scenario_snapshot_hash"]
         assert first["event_log_hash"] != second["event_log_hash"]
+    assert first["manifest"]["deterministic_execution_input_hash"] != second["manifest"][
+        "deterministic_execution_input_hash"
+    ]
 
 
 def test_common_scenario_snapshot_excludes_branch_specific_fields():
@@ -94,6 +97,7 @@ def test_common_scenario_snapshot_excludes_branch_specific_fields():
     assert sha256_json(common_scenario_snapshot(first)) == sha256_json(
         common_scenario_snapshot(second)
     )
+    assert sha256_json(first) != sha256_json(second)
 
 
 @pytest.mark.parametrize("branch", ["international_integration", "open_platform"])

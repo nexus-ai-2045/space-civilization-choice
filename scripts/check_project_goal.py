@@ -58,6 +58,9 @@ CANONICAL_TRACE_AXES = frozenset(
         "public_legitimacy",
     }
 )
+CANONICAL_BRANCH_IDS = frozenset(
+    {"international_integration", "domestic_autonomy", "open_platform"}
+)
 LiveVerifier = Callable[[str, dict[str, Any]], dict[str, Any]]
 HeadResolver = Callable[[Path], str]
 PersonalPathScanner = Callable[[Path], tuple[bool, list[str]]]
@@ -654,19 +657,20 @@ def _validate_done_when_artifact_contents(
         valid = manifest.get("schema") == "space_civilization_run_manifest.v1"
         valid = valid and isinstance(replays, list) and len(replays) >= 2
         replay_output: str | None = None
-        replay_signature: tuple[str, int, str] | None = None
+        replay_signature: tuple[str, str, int, str] | None = None
         if valid:
-            signatures: set[tuple[str, int, str]] = set()
+            signatures: set[tuple[str, str, int, str]] = set()
             outputs: set[str] = set()
             for run in replays:
                 if not isinstance(run, dict):
                     valid = False
                     break
                 snapshot = run.get("scenario_snapshot_hash")
+                execution_input = run.get("deterministic_execution_input_hash")
                 seed = run.get("seed")
                 model_version = run.get("model_version")
                 # setへ入れる前にhash可能な正規形へ落とす。不正値はTypeErrorにせず証拠無効にする。
-                if not _is_digest(snapshot):
+                if not _is_digest(snapshot) or not _is_digest(execution_input):
                     valid = False
                     break
                 if type(seed) is not int:
@@ -675,7 +679,7 @@ def _validate_done_when_artifact_contents(
                 if not isinstance(model_version, str) or not model_version:
                     valid = False
                     break
-                signatures.add((snapshot, seed, model_version))
+                signatures.add((snapshot, execution_input, seed, model_version))
                 output_hash = run.get("canonical_output_hash")
                 if not _is_digest(output_hash):
                     valid = False
@@ -726,8 +730,10 @@ def _validate_done_when_artifact_contents(
             if stored_valid and isinstance(persisted_manifest, dict) and replay_signature is not None:
                 stored_valid = (
                     persisted_manifest.get("scenario_snapshot_hash") == replay_signature[0]
-                    and persisted_manifest.get("seed") == replay_signature[1]
-                    and persisted_manifest.get("model_version") == replay_signature[2]
+                    and persisted_manifest.get("deterministic_execution_input_hash") == replay_signature[1]
+                    and stored.get("deterministic_execution_input_hash") == replay_signature[1]
+                    and persisted_manifest.get("seed") == replay_signature[2]
+                    and persisted_manifest.get("model_version") == replay_signature[3]
                 )
         else:
             stored_valid = False
@@ -740,24 +746,52 @@ def _validate_done_when_artifact_contents(
                 before = event.get("before")
                 after = event.get("after")
                 deltas = event.get("axis_deltas")
-                if not isinstance(before, dict) or not isinstance(after, dict) or not isinstance(deltas, dict):
+                base_deltas = event.get("base_axis_deltas")
+                exogenous = event.get("exogenous_effect")
+                random_draw = event.get("random_draw")
+                if not all(
+                    isinstance(value, dict)
+                    for value in (before, after, deltas, base_deltas, exogenous)
+                ):
                     stored_valid = False
                     break
                 if (
                     set(before) != CANONICAL_TRACE_AXES
                     or set(after) != CANONICAL_TRACE_AXES
                     or set(deltas) != CANONICAL_TRACE_AXES
+                    or set(base_deltas) != CANONICAL_TRACE_AXES
+                ):
+                    stored_valid = False
+                    break
+                effect_axis = exogenous.get("axis")
+                modifier = exogenous.get("modifier")
+                provenance = exogenous.get("provenance")
+                if (
+                    effect_axis not in CANONICAL_TRACE_AXES
+                    or type(modifier) is not int
+                    or not isinstance(provenance, str)
+                    or not provenance.strip()
+                    or type(random_draw) not in (int, float)
+                    or isinstance(random_draw, bool)
+                    or not 0 <= random_draw < 1
                 ):
                     stored_valid = False
                     break
                 for axis in CANONICAL_TRACE_AXES:
                     value = before[axis]
                     delta = deltas[axis]
+                    base_delta = base_deltas[axis]
                     after_value = after[axis]
-                    if not all(type(item) is int for item in (value, delta, after_value)):
+                    if not all(
+                        type(item) is int
+                        for item in (value, delta, base_delta, after_value)
+                    ):
                         stored_valid = False
                         break
-                    if value + delta != after_value:
+                    expected_delta = base_delta + (
+                        modifier if axis == effect_axis else 0
+                    )
+                    if delta != expected_delta or value + delta != after_value:
                         stored_valid = False
                         break
                 if not stored_valid:
@@ -819,7 +853,7 @@ def _validate_done_when_artifact_contents(
                     valid = False
                 else:
                     event_log_hashes.add(event_log_hash)
-            valid = valid and len(branch_ids) == 3 and len(common_inputs) == 1
+            valid = valid and branch_ids == CANONICAL_BRANCH_IDS and len(common_inputs) == 1
             valid = valid and len(event_log_hashes) == 3
             if valid:
                 common = next(iter(common_inputs))

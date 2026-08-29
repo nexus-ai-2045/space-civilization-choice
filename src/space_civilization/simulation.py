@@ -184,6 +184,7 @@ def run_simulation(fixture: dict[str, Any]) -> dict[str, Any]:
     manifest = {
         "scenario_snapshot_id": fixture["scenario_snapshot_id"],
         "scenario_snapshot_hash": scenario_snapshot_hash,
+        "deterministic_execution_input_hash": sha256_json(fixture),
         "seed": fixture["seed"],
         "model_version": fixture["model_version"],
         "branch_id": fixture["branch"],
