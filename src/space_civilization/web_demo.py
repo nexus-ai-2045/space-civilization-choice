@@ -40,6 +40,11 @@ def build_demo_result() -> dict[str, Any]:
         }
         proposal = propose_action(context)
         previous_action = fixtures[branch]["rounds"][0]["action"]
+        fixtures[branch]["rounds"][0]["base_action"] = previous_action
+        fixtures[branch]["rounds"][0]["base_rule_id"] = fixtures[branch]["rounds"][0]["rule_id"]
+        fixtures[branch]["rounds"][0]["base_axis_deltas"] = deepcopy(
+            fixtures[branch]["rounds"][0]["axis_deltas"]
+        )
         fixtures[branch]["rounds"][0]["action"] = proposal.action
         fixtures[branch]["rounds"][0]["rule_id"] = PHASE1_TRANSITION_RULES[proposal.action]["rule_id"]
         fixtures[branch]["rounds"][0]["axis_deltas"] = replace_action_effect(
