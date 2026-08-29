@@ -409,6 +409,9 @@ def _git_is_ancestor(repo: Path, maybe_ancestor: str, head: str) -> bool:
 
 def _scan_tracked_personal_paths(repo: Path) -> tuple[bool, list[str]]:
     """cleanなHEADのtracked textだけを上限付きで直接走査する。"""
+    # Windows runners may expose the temp root through an 8.3 short path while
+    # child.resolve() expands it. Compare canonical forms to avoid a false escape.
+    canonical_repo = repo.resolve()
     clean = subprocess.run(
         ["git", "-C", str(repo), "diff", "--quiet", "--no-ext-diff", "HEAD", "--"],
         check=False,
@@ -435,9 +438,9 @@ def _scan_tracked_personal_paths(repo: Path) -> tuple[bool, list[str]]:
     total_bytes = 0
     for raw_path in raw_paths:
         relative = raw_path.decode("utf-8", errors="strict")
-        candidate = (repo / relative).resolve()
+        candidate = (canonical_repo / relative).resolve()
         try:
-            candidate.relative_to(repo)
+            candidate.relative_to(canonical_repo)
         except ValueError as error:
             raise ValueError("tracked path escapes repository") from error
         data = candidate.read_bytes()
