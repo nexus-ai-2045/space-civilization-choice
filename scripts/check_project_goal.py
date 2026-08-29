@@ -7,6 +7,7 @@ import argparse
 import ast
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -125,6 +126,13 @@ DONE_WHEN_EVIDENCE_CONTRACTS: dict[str, dict[str, Any]] = {
         "artifacts": {
             "test": r"^tests/.+\.py$",
             "run_manifest": r"^(?:evidence|artifacts)/runs/.+\.json$",
+            "event_log_international_integration": (
+                r"^(?:evidence|artifacts)/runs/.+/events\.jsonl$"
+            ),
+            "event_log_domestic_autonomy": (
+                r"^(?:evidence|artifacts)/runs/.+/events\.jsonl$"
+            ),
+            "event_log_open_platform": r"^(?:evidence|artifacts)/runs/.+/events\.jsonl$",
         },
     },
     "TRACE-001": {
@@ -543,6 +551,18 @@ def _default_live_verifier(
                 if not isinstance(name, str):
                     continue
                 conclusion = check.get("conclusion")
+                status = check.get("status")
+                # goal-contract 自身が検査中のとき、同一HEADの未完了goal-contractを
+                # 暫定success扱いし、自己依存の鶏卵を避ける。
+                if (
+                    conclusion is None
+                    and status in {"queued", "in_progress"}
+                    and name.startswith("goal-contract")
+                    and os.environ.get("GITHUB_ACTIONS") == "true"
+                    and os.environ.get("GITHUB_JOB") == "goal-contract"
+                    and os.environ.get("GITHUB_SHA", "").lower() == inspected_head
+                ):
+                    conclusion = "success"
                 # 同名checkが複数ある場合はsuccessを優先して残す。
                 if name not in jobs or conclusion == "success":
                     jobs[name] = conclusion
@@ -768,7 +788,15 @@ def _validate_done_when_artifact_contents(
                 simulation = _simulation_api()
                 fixture = simulation.load_fixture(paths["fixture"])
                 live_result = simulation.run_simulation(fixture)
-            except (OSError, UnicodeError, ValueError, ImportError, ModuleNotFoundError):
+            except (
+                OSError,
+                UnicodeError,
+                ValueError,
+                TypeError,
+                AttributeError,
+                ImportError,
+                ModuleNotFoundError,
+            ):
                 stored_valid = False
             else:
                 stored_valid = (
@@ -892,7 +920,7 @@ def _validate_done_when_artifact_contents(
         valid = valid and isinstance(branches, list) and len(branches) == 3
         if valid:
             branch_ids: set[str] = set()
-            common_inputs: set[tuple[Any, Any, Any, Any]] = set()
+            common_inputs: set[tuple[str, int, str, str]] = set()
             event_log_hashes: set[str] = set()
             for branch in branches:
                 if not isinstance(branch, dict) or not isinstance(
@@ -900,26 +928,47 @@ def _validate_done_when_artifact_contents(
                 ):
                     valid = False
                     break
-                branch_ids.add(branch["branch_id"])
-                common_inputs.add(
-                    (
-                        branch.get("scenario_snapshot_hash"),
-                        branch.get("seed"),
-                        branch.get("model_version"),
-                        branch.get("exogenous_event_stream_hash"),
-                    )
-                )
+                branch_id = branch["branch_id"]
+                snapshot = branch.get("scenario_snapshot_hash")
+                seed = branch.get("seed")
+                model_version = branch.get("model_version")
+                stream_hash = branch.get("exogenous_event_stream_hash")
                 event_log_hash = branch.get("event_log_hash")
+                # set挿入前にhash可能な正規形へ落とす。
+                if not _is_digest(snapshot) or not _is_digest(stream_hash):
+                    valid = False
+                    break
+                if type(seed) is not int:
+                    valid = False
+                    break
+                if not isinstance(model_version, str) or not model_version:
+                    valid = False
+                    break
                 if not _is_digest(event_log_hash):
                     valid = False
-                else:
-                    event_log_hashes.add(event_log_hash)
+                    break
+                log_role = f"event_log_{branch_id}"
+                log_path = paths.get(log_role)
+                if log_path is None:
+                    valid = False
+                    break
+                try:
+                    events = [
+                        json.loads(line)
+                        for line in log_path.read_text(encoding="utf-8").splitlines()
+                        if line.strip()
+                    ]
+                except (OSError, UnicodeError, json.JSONDecodeError):
+                    valid = False
+                    break
+                if not events or _sha256_json(events) != event_log_hash:
+                    valid = False
+                    break
+                branch_ids.add(branch_id)
+                common_inputs.add((snapshot, seed, model_version, stream_hash))
+                event_log_hashes.add(event_log_hash)
             valid = valid and branch_ids == CANONICAL_BRANCH_IDS and len(common_inputs) == 1
             valid = valid and len(event_log_hashes) == 3
-            if valid:
-                common = next(iter(common_inputs))
-                valid = _is_digest(common[0]) and _is_digest(common[3])
-                valid = valid and bool(common[2])
         if not valid:
             _evidence_error(findings, goal_id, "branch_result_invalid")
         return
@@ -1007,7 +1056,8 @@ def _validate_done_when_artifact_contents(
                 )
                 valid = valid and isinstance(random_draw, (int, float))
                 valid = valid and not isinstance(random_draw, bool)
-                valid = valid and 0 <= float(random_draw) < 1
+                # float()変換は巨大整数でOverflowErrorになるため、直接比較する。
+                valid = valid and 0 <= random_draw < 1
                 if valid and isinstance(base_deltas, dict) and isinstance(exogenous, dict):
                     expected = dict(base_deltas)
                     expected[exogenous_axis] = (

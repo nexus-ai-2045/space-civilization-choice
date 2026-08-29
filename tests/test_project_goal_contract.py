@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import importlib.util
 import hashlib
+import importlib.util
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -145,37 +146,48 @@ class ProjectGoalContractTest(unittest.TestCase):
         stream_field = (
             "event_stream_hash" if legacy_field else "exogenous_event_stream_hash"
         )
+        artifacts = {
+            "test": "tests/branch_evidence.py",
+            "run_manifest": "evidence/runs/branches.json",
+        }
+        branches = []
+        for branch_id, character in zip(
+            sorted(MODULE.CANONICAL_BRANCH_IDS), "cde", strict=True
+        ):
+            events = [{"branch_id": branch_id, "marker": character}]
+            relative = f"evidence/runs/{branch_id}/events.jsonl"
+            log_path = repo / relative
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            log_path.write_text(
+                "".join(
+                    json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n"
+                    for event in events
+                ),
+                encoding="utf-8",
+            )
+            branches.append(
+                {
+                    "branch_id": branch_id,
+                    "scenario_snapshot_hash": "a" * 64,
+                    "seed": 7,
+                    "model_version": "v1",
+                    stream_field: "b" * 64,
+                    "event_log_hash": MODULE._sha256_json(events),
+                }
+            )
+            artifacts[f"event_log_{branch_id}"] = relative
         manifest_path = repo / "evidence" / "runs" / "branches.json"
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
         manifest_path.write_text(
             json.dumps(
                 {
                     "schema": "space_civilization_run_manifest.v1",
-                    "branches": [
-                        {
-                            "branch_id": branch_id,
-                            "scenario_snapshot_hash": "a" * 64,
-                            "seed": 7,
-                            "model_version": "v1",
-                            stream_field: "b" * 64,
-                            "event_log_hash": character * 64,
-                        }
-                        for branch_id, character in zip(
-                            sorted(MODULE.CANONICAL_BRANCH_IDS), "cde", strict=True
-                        )
-                    ],
+                    "branches": branches,
                 }
             ),
             encoding="utf-8",
         )
-        self._write_evidence_receipt(
-            repo,
-            "BRANCH-001",
-            {
-                "test": "tests/branch_evidence.py",
-                "run_manifest": "evidence/runs/branches.json",
-            },
-        )
+        self._write_evidence_receipt(repo, "BRANCH-001", artifacts)
 
     def _write_ci_evidence(self, repo: Path, head_sha: str) -> str:
         workflow = repo / ".github" / "workflows" / "completion.yml"
@@ -1015,6 +1027,55 @@ class ProjectGoalContractTest(unittest.TestCase):
 
         self.assertTrue(report["contract_valid"], report["findings"])
 
+    def test_branch_rejects_unhashable_shared_inputs_with_structured_finding(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            tmp_path = Path(directory)
+            self._copy_contract(tmp_path)
+            self._activate_done_when(tmp_path, "BRANCH-001")
+            self._write_branch_evidence(tmp_path)
+            manifest = tmp_path / "evidence/runs/branches.json"
+            payload = json.loads(manifest.read_text(encoding="utf-8"))
+            for branch in payload["branches"]:
+                branch["seed"] = {"nested": True}
+            manifest.write_text(json.dumps(payload), encoding="utf-8")
+            receipt = tmp_path / "evidence/done-when/BRANCH-001.json"
+            receipt_payload = json.loads(receipt.read_text(encoding="utf-8"))
+            receipt_payload["artifact_sha256"]["run_manifest"] = hashlib.sha256(
+                _canonical_text_bytes(manifest)
+            ).hexdigest()
+            receipt.write_text(json.dumps(receipt_payload), encoding="utf-8")
+
+            report = MODULE.build_report(tmp_path)
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "branch_result_invalid",
+            {item.get("reason") for item in report["findings"]},
+        )
+
+    def test_branch_rejects_copied_hash_without_matching_event_log(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            tmp_path = Path(directory)
+            self._copy_contract(tmp_path)
+            self._activate_done_when(tmp_path, "BRANCH-001")
+            self._write_branch_evidence(tmp_path)
+            log = tmp_path / "evidence/runs/domestic_autonomy/events.jsonl"
+            log.write_text('{"tampered": true}\n', encoding="utf-8")
+            receipt = tmp_path / "evidence/done-when/BRANCH-001.json"
+            receipt_payload = json.loads(receipt.read_text(encoding="utf-8"))
+            receipt_payload["artifact_sha256"]["event_log_domestic_autonomy"] = (
+                hashlib.sha256(_canonical_text_bytes(log)).hexdigest()
+            )
+            receipt.write_text(json.dumps(receipt_payload), encoding="utf-8")
+
+            report = MODULE.build_report(tmp_path)
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "branch_result_invalid",
+            {item.get("reason") for item in report["findings"]},
+        )
+
     def test_branch_rejects_legacy_event_stream_field(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             tmp_path = Path(directory)
@@ -1133,6 +1194,63 @@ class ProjectGoalContractTest(unittest.TestCase):
         self.assertIn(
             "ci_live_readback_mismatch",
             {item.get("reason") for item in report["findings"]},
+        )
+
+    def test_ci_live_readback_bootstraps_in_progress_goal_contract_jobs(
+        self,
+    ) -> None:
+        inspected_head = "a" * 40
+        original = MODULE._github_json
+
+        def fake_github(api_path: str):
+            self.assertIn(inspected_head, api_path)
+            return {
+                "check_runs": [
+                    {
+                        "name": "secret-scan",
+                        "conclusion": "success",
+                        "status": "completed",
+                    },
+                    {
+                        "name": "goal-contract (ubuntu-latest)",
+                        "conclusion": None,
+                        "status": "in_progress",
+                    },
+                    {
+                        "name": "goal-contract (windows-latest)",
+                        "conclusion": None,
+                        "status": "queued",
+                    },
+                    {
+                        "name": "ratchet (ubuntu-latest)",
+                        "conclusion": "success",
+                        "status": "completed",
+                    },
+                    {
+                        "name": "ratchet (windows-latest)",
+                        "conclusion": "success",
+                        "status": "completed",
+                    },
+                ]
+            }
+
+        MODULE._github_json = fake_github  # type: ignore[method-assign]
+        try:
+            os.environ["GITHUB_ACTIONS"] = "true"
+            os.environ["GITHUB_JOB"] = "goal-contract"
+            os.environ["GITHUB_SHA"] = inspected_head
+            live = MODULE._default_live_verifier(
+                "CI-001", {"inspected_head": inspected_head}
+            )
+        finally:
+            MODULE._github_json = original  # type: ignore[method-assign]
+            for key in ("GITHUB_ACTIONS", "GITHUB_JOB", "GITHUB_SHA"):
+                os.environ.pop(key, None)
+
+        self.assertEqual(live["conclusion"], "success")
+        self.assertEqual(
+            live["jobs"]["goal-contract (ubuntu-latest)"],
+            "success",
         )
 
     def test_required_ci_jobs_match_workflow_matrix_names(self) -> None:
@@ -1305,10 +1423,18 @@ class ProjectGoalContractTest(unittest.TestCase):
             "BRANCH-001": {
                 "test": "tests/branch_evidence.py",
                 "run_manifest": "evidence/runs/branches.json",
+                "event_log_international_integration": (
+                    "evidence/runs/international_integration/events.jsonl"
+                ),
+                "event_log_domestic_autonomy": (
+                    "evidence/runs/domestic_autonomy/events.jsonl"
+                ),
+                "event_log_open_platform": "evidence/runs/open_platform/events.jsonl",
             },
             "TRACE-001": {
                 "test": "tests/trace_evidence.py",
                 "trace": "evidence/runs/trace.json",
+                "source_manifest": "evidence/runs/trace/run-manifest.json",
                 "event_log": "evidence/runs/trace/events.jsonl",
             },
             "CLASS-001": {

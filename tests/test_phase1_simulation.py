@@ -223,6 +223,30 @@ def test_fixture_rejects_action_rule_or_base_delta_mismatch():
         run_simulation(data)
 
 
+def test_fixture_rejects_non_string_evidence_ref():
+    data = load_fixture(FIXTURE)
+    data["rounds"][0]["evidence_ref"] = 42
+
+    with pytest.raises(SimulationError, match="evidence_ref must be a model-assumption string"):
+        run_simulation(data)
+
+
+def test_fixture_rejects_non_object_top_level(tmp_path):
+    invalid = tmp_path / "invalid.json"
+    invalid.write_text("[]", encoding="utf-8")
+
+    with pytest.raises(SimulationError, match="fixture must be a JSON object"):
+        load_fixture(invalid)
+
+
+def test_fixture_rejects_null_rounds():
+    data = load_fixture(FIXTURE)
+    data["rounds"] = None
+
+    with pytest.raises(SimulationError, match="rounds must be a list"):
+        run_simulation(data)
+
+
 @pytest.mark.parametrize("seed", [True, False])
 def test_fixture_rejects_boolean_seed(seed):
     data = load_fixture(FIXTURE)

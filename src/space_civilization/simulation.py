@@ -79,11 +79,15 @@ def deterministic_execution_input_hash(fixture: dict[str, Any]) -> str:
 
 def load_fixture(path: str | Path) -> dict[str, Any]:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise SimulationError("fixture must be a JSON object")
     validate_fixture(data)
     return data
 
 
 def validate_fixture(data: dict[str, Any]) -> None:
+    if not isinstance(data, dict):
+        raise SimulationError("fixture must be a JSON object")
     required = {"scenario_snapshot_id", "model_version", "seed", "branch", "initial_state", "rounds"}
     missing = sorted(required - data.keys())
     if missing:
@@ -92,9 +96,14 @@ def validate_fixture(data: dict[str, Any]) -> None:
         raise SimulationError("Phase 1 only has transition rules for domestic_autonomy")
     if not _is_int(data["seed"]):
         raise SimulationError("seed must be an integer")
-    if [item.get("year") for item in data["rounds"]] != list(ROUNDS):
+    rounds = data["rounds"]
+    if not isinstance(rounds, list):
+        raise SimulationError("rounds must be a list")
+    if [item.get("year") if isinstance(item, dict) else None for item in rounds] != list(ROUNDS):
         raise SimulationError(f"rounds must be {list(ROUNDS)}")
     state = data["initial_state"]
+    if not isinstance(state, dict):
+        raise SimulationError("initial_state must be an object")
     if set(state.get("axes", {})) != set(AXES):
         raise SimulationError("initial_state.axes must contain the six canonical axes")
     if set(state.get("agents", {})) != set(AGENTS):
@@ -102,8 +111,17 @@ def validate_fixture(data: dict[str, Any]) -> None:
     for axis, value in state["axes"].items():
         if not _is_int(value) or not 0 <= value <= 100:
             raise SimulationError(f"axis out of range: {axis}")
-    for index, item in enumerate(data["rounds"], start=1):
-        if not item.get("action") or not item.get("rule_id") or not item.get("evidence_ref"):
+    for index, item in enumerate(rounds, start=1):
+        if not isinstance(item, dict):
+            raise SimulationError(f"round {index} must be an object")
+        evidence_ref = item.get("evidence_ref")
+        if (
+            not isinstance(evidence_ref, str)
+            or not evidence_ref.strip()
+            or not evidence_ref.startswith("model-assumption:")
+        ):
+            raise SimulationError(f"round {index} evidence_ref must be a model-assumption string")
+        if not item.get("action") or not item.get("rule_id"):
             raise SimulationError(f"round {index} lacks trace fields")
         transition_rule = PHASE1_TRANSITION_RULES.get(item.get("action"))
         if transition_rule is None:
