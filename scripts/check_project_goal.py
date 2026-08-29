@@ -9,6 +9,7 @@ import hashlib
 import json
 import re
 import subprocess
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -61,6 +62,13 @@ CANONICAL_TRACE_AXES = frozenset(
 CANONICAL_BRANCH_IDS = frozenset(
     {"international_integration", "domestic_autonomy", "open_platform"}
 )
+PHASE1_TRACE_TURN_IDS = (1, 2, 3, 4)
+PHASE1_ACTION_RULES = {
+    "allocate_to_domestic_core_components": "R-DOM-01",
+    "qualify_redundant_component_supply": "R-DOM-02",
+    "expand_maintainer_training": "R-DOM-03",
+    "operate_with_domestic_maintenance_chain": "R-DOM-04",
+}
 LiveVerifier = Callable[[str, dict[str, Any]], dict[str, Any]]
 HeadResolver = Callable[[Path], str]
 PersonalPathScanner = Callable[[Path], tuple[bool, list[str]]]
@@ -106,6 +114,7 @@ DONE_WHEN_EVIDENCE_CONTRACTS: dict[str, dict[str, Any]] = {
         "evidence_type": "deterministic_replay",
         "artifacts": {
             "test": r"^tests/.+\.py$",
+            "fixture": r"^fixtures/.+\.json$",
             "run_manifest": r"^(?:evidence|artifacts)/runs/.+\.json$",
             "canonical_manifest": r"^(?:evidence|artifacts)/runs/.+/run-manifest\.json$",
             "event_log": r"^(?:evidence|artifacts)/runs/.+/events\.jsonl$",
@@ -123,6 +132,7 @@ DONE_WHEN_EVIDENCE_CONTRACTS: dict[str, dict[str, Any]] = {
         "artifacts": {
             "test": r"^tests/.+\.py$",
             "trace": r"^(?:evidence|artifacts)/runs/.+\.jsonl?$",
+            "event_log": r"^(?:evidence|artifacts)/runs/.+/events\.jsonl$",
         },
     },
     "CLASS-001": {
@@ -387,6 +397,17 @@ def _sha256_json(value: Any) -> str:
             value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ).encode("utf-8")
     ).hexdigest()
+
+
+def _simulation_api():
+    """goal gateから決定論的coreを読み、fixture再実行とdraw再計算に使う。"""
+    root = Path(__file__).resolve().parents[1]
+    src = str(root / "src")
+    if src not in sys.path:
+        sys.path.insert(0, src)
+    import space_civilization.simulation as simulation
+
+    return simulation
 
 
 def _positive_int(value: Any) -> bool:
@@ -720,25 +741,45 @@ def _validate_done_when_artifact_contents(
         stored_valid = stored_valid and computed_output_hash == replay_output
         stored_valid = stored_valid and stored.get("canonical_output_hash") == computed_output_hash
         stored_valid = stored_valid and receipt_hash == computed_output_hash
+        persisted_manifest: dict[str, Any] | None = None
         if isinstance(canonical_result, dict):
             stored_valid = stored_valid and canonical_result.get("events") == events
             stored_valid = stored_valid and canonical_result.get("event_log_hash") == _sha256_json(events)
-            persisted_manifest = canonical_result.get("manifest")
+            maybe_manifest = canonical_result.get("manifest")
             # replay署名は永続化されたresult.manifestへ束縛する。
-            stored_valid = stored_valid and isinstance(persisted_manifest, dict)
+            stored_valid = stored_valid and isinstance(maybe_manifest, dict)
             stored_valid = stored_valid and replay_signature is not None
-            if stored_valid and isinstance(persisted_manifest, dict) and replay_signature is not None:
+            if stored_valid and isinstance(maybe_manifest, dict) and replay_signature is not None:
+                persisted_manifest = maybe_manifest
                 stored_valid = (
-                    persisted_manifest.get("scenario_snapshot_hash") == replay_signature[0]
-                    and persisted_manifest.get("deterministic_execution_input_hash") == replay_signature[1]
+                    maybe_manifest.get("scenario_snapshot_hash") == replay_signature[0]
+                    and maybe_manifest.get("deterministic_execution_input_hash")
+                    == replay_signature[1]
                     and stored.get("deterministic_execution_input_hash") == replay_signature[1]
-                    and persisted_manifest.get("seed") == replay_signature[2]
-                    and persisted_manifest.get("model_version") == replay_signature[3]
+                    and maybe_manifest.get("seed") == replay_signature[2]
+                    and maybe_manifest.get("model_version") == replay_signature[3]
                 )
         else:
             stored_valid = False
-        if stored_valid:
+        # fixtureそのものからexecution hashとoutputを再計算し、copied digestだけの証明を拒否する。
+        if stored_valid and replay_signature is not None:
+            try:
+                simulation = _simulation_api()
+                fixture = simulation.load_fixture(paths["fixture"])
+                live_result = simulation.run_simulation(fixture)
+            except (OSError, UnicodeError, ValueError, ImportError, ModuleNotFoundError):
+                stored_valid = False
+            else:
+                stored_valid = (
+                    simulation.sha256_json(fixture) == replay_signature[1]
+                    and live_result["manifest"]["deterministic_execution_input_hash"]
+                    == replay_signature[1]
+                    and live_result["canonical_output_hash"] == computed_output_hash
+                    and live_result["events"] == events
+                )
+        if stored_valid and isinstance(persisted_manifest, dict):
             previous_after: dict[str, int] | None = None
+            seed = persisted_manifest.get("seed")
             for event in events:
                 if not isinstance(event, dict):
                     stored_valid = False
@@ -749,9 +790,13 @@ def _validate_done_when_artifact_contents(
                 base_deltas = event.get("base_axis_deltas")
                 exogenous = event.get("exogenous_effect")
                 random_draw = event.get("random_draw")
+                event_input = event.get("input")
+                year = event.get("year")
+                action = event.get("action")
+                rule_id = event.get("rule_id")
                 if not all(
                     isinstance(value, dict)
-                    for value in (before, after, deltas, base_deltas, exogenous)
+                    for value in (before, after, deltas, base_deltas, exogenous, event_input)
                 ):
                     stored_valid = False
                     break
@@ -763,17 +808,36 @@ def _validate_done_when_artifact_contents(
                 ):
                     stored_valid = False
                     break
+                if PHASE1_ACTION_RULES.get(action) != rule_id:
+                    stored_valid = False
+                    break
+                input_event = event_input.get("exogenous_event")
                 effect_axis = exogenous.get("axis")
                 modifier = exogenous.get("modifier")
                 provenance = exogenous.get("provenance")
                 if (
-                    effect_axis not in CANONICAL_TRACE_AXES
-                    or type(modifier) is not int
-                    or not isinstance(provenance, str)
-                    or not provenance.strip()
+                    not isinstance(input_event, str)
+                    or provenance != input_event
+                    or type(seed) is not int
+                    or type(year) is not int
                     or type(random_draw) not in (int, float)
                     or isinstance(random_draw, bool)
-                    or not 0 <= random_draw < 1
+                ):
+                    stored_valid = False
+                    break
+                try:
+                    simulation = _simulation_api()
+                    expected_draw = simulation.deterministic_draw(seed, year, input_event)
+                    expected_effect = simulation.realize_exogenous_effect(
+                        input_event, expected_draw
+                    )
+                except (ValueError, KeyError, ImportError, ModuleNotFoundError):
+                    stored_valid = False
+                    break
+                if (
+                    random_draw != expected_draw
+                    or effect_axis != expected_effect["axis"]
+                    or modifier != expected_effect["modifier"]
                 ):
                     stored_valid = False
                     break
@@ -802,11 +866,7 @@ def _validate_done_when_artifact_contents(
                     break
                 previous_after = after
             if stored_valid:
-                final_state = (
-                    canonical_result.get("final_state")
-                    if isinstance(canonical_result, dict)
-                    else None
-                )
+                final_state = canonical_result.get("final_state")
                 final_axes = (
                     final_state.get("axes") if isinstance(final_state, dict) else None
                 )
@@ -883,8 +943,29 @@ def _validate_done_when_artifact_contents(
         else:
             payload = _read_json_evidence(trace_path, goal_id, "trace", findings)
             records = payload.get("records") if isinstance(payload, dict) else payload
+        try:
+            events = [
+                json.loads(line)
+                for line in paths["event_log"].read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            _evidence_error(findings, goal_id, "event_log_invalid_jsonl")
+            return
+        receipt_result = receipt.get("result")
+        declared_count = (
+            receipt_result.get("record_count")
+            if isinstance(receipt_result, dict)
+            else None
+        )
         valid = isinstance(records, list) and bool(records)
+        valid = valid and type(declared_count) is int and declared_count == len(records)
+        valid = valid and declared_count == len(PHASE1_TRACE_TURN_IDS)
+        valid = valid and len(events) == declared_count
         required = ("turn_id", "inputs", "action", "model_rule", "evidence_refs")
+        if valid:
+            turn_ids = [record.get("turn_id") for record in records if isinstance(record, dict)]
+            valid = turn_ids == list(PHASE1_TRACE_TURN_IDS)
         if valid:
             for record in records:
                 valid = isinstance(record, dict) and all(
@@ -928,6 +1009,15 @@ def _validate_done_when_artifact_contents(
                     valid = axis_deltas == expected
                 if not valid:
                     break
+        if valid:
+            try:
+                simulation = _simulation_api()
+                projected = simulation.build_model_internal_trace(events)
+            except (ValueError, KeyError, TypeError, ImportError, ModuleNotFoundError):
+                valid = False
+            else:
+                # traceは同一runのevent投影そのものへ束縛する。
+                valid = records == projected
         if not valid:
             _evidence_error(findings, goal_id, "trace_result_invalid")
         return

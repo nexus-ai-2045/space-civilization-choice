@@ -215,6 +215,7 @@ class ProjectGoalContractTest(unittest.TestCase):
         self._copy_contract(repo)
         for relative in (
             "tests/test_phase1_simulation.py",
+            "fixtures/phase1_domestic_autonomy.json",
             "evidence/runs/phase1-replay.json",
             "evidence/runs/phase1-domestic-autonomy-20260828-v2/run-manifest.json",
             "evidence/runs/phase1-domestic-autonomy-20260828-v2/events.jsonl",
@@ -229,6 +230,25 @@ class ProjectGoalContractTest(unittest.TestCase):
             repo / "evidence/runs/phase1-domestic-autonomy-20260828-v2/run-manifest.json",
             repo / "evidence/runs/phase1-domestic-autonomy-20260828-v2/events.jsonl",
             repo / "evidence/done-when/REPLAY-001.json",
+        )
+
+    def _prepare_trace_evidence(self, repo: Path) -> tuple[Path, Path, Path]:
+        self._copy_contract(repo)
+        for relative in (
+            "tests/test_phase1_simulation.py",
+            "evidence/runs/phase1-domestic-autonomy-20260828-v2/trace.jsonl",
+            "evidence/runs/phase1-domestic-autonomy-20260828-v2/events.jsonl",
+            "evidence/done-when/TRACE-001.json",
+        ):
+            source = ROOT / relative
+            target = repo / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(source.read_bytes())
+        self._activate_done_when(repo, "TRACE-001")
+        return (
+            repo / "evidence/runs/phase1-domestic-autonomy-20260828-v2/trace.jsonl",
+            repo / "evidence/runs/phase1-domestic-autonomy-20260828-v2/events.jsonl",
+            repo / "evidence/done-when/TRACE-001.json",
         )
 
     def _rewrite_replay_artifact_hashes(
@@ -249,6 +269,7 @@ class ProjectGoalContractTest(unittest.TestCase):
             "run_manifest": replay,
             "canonical_manifest": stored,
             "event_log": event_log,
+            "fixture": repo / "fixtures/phase1_domestic_autonomy.json",
         }.items():
             receipt_payload["artifact_sha256"][role] = hashlib.sha256(
                 _canonical_text_bytes(path)
@@ -331,6 +352,7 @@ class ProjectGoalContractTest(unittest.TestCase):
             self._copy_contract(tmp_path)
             for relative in (
                 "tests/test_phase1_simulation.py",
+                "fixtures/phase1_domestic_autonomy.json",
                 "evidence/runs/phase1-replay.json",
                 "evidence/runs/phase1-domestic-autonomy-20260828-v2/run-manifest.json",
                 "evidence/runs/phase1-domestic-autonomy-20260828-v2/events.jsonl",
@@ -449,6 +471,7 @@ class ProjectGoalContractTest(unittest.TestCase):
                 "run_manifest": replay,
                 "canonical_manifest": stored,
                 "event_log": event_log,
+                "fixture": tmp_path / "fixtures/phase1_domestic_autonomy.json",
             }.items():
                 receipt_payload["artifact_sha256"][role] = hashlib.sha256(
                     _canonical_text_bytes(path)
@@ -498,6 +521,7 @@ class ProjectGoalContractTest(unittest.TestCase):
                 "run_manifest": replay,
                 "canonical_manifest": stored,
                 "event_log": event_log,
+                "fixture": tmp_path / "fixtures/phase1_domestic_autonomy.json",
             }.items():
                 receipt_payload["artifact_sha256"][role] = hashlib.sha256(
                     _canonical_text_bytes(path)
@@ -606,6 +630,7 @@ class ProjectGoalContractTest(unittest.TestCase):
                 "run_manifest": replay,
                 "canonical_manifest": stored,
                 "event_log": event_log,
+                "fixture": tmp_path / "fixtures/phase1_domestic_autonomy.json",
             }.items():
                 receipt_payload["artifact_sha256"][role] = hashlib.sha256(
                     _canonical_text_bytes(path)
@@ -671,19 +696,8 @@ class ProjectGoalContractTest(unittest.TestCase):
     def test_trace_rejects_missing_provenance_fields(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             tmp_path = Path(directory)
-            self._copy_contract(tmp_path)
-            for relative in (
-                "tests/test_phase1_simulation.py",
-                "evidence/runs/phase1-domestic-autonomy-20260828-v2/trace.jsonl",
-                "evidence/done-when/TRACE-001.json",
-            ):
-                source = ROOT / relative
-                target = tmp_path / relative
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(source.read_bytes())
-            self._activate_done_when(tmp_path, "TRACE-001")
+            trace, _event_log, receipt = self._prepare_trace_evidence(tmp_path)
 
-            trace = tmp_path / "evidence/runs/phase1-domestic-autonomy-20260828-v2/trace.jsonl"
             records = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
             for record in records:
                 record.pop("base_axis_deltas", None)
@@ -693,7 +707,6 @@ class ProjectGoalContractTest(unittest.TestCase):
                 "\n".join(json.dumps(record, ensure_ascii=False) for record in records) + "\n",
                 encoding="utf-8",
             )
-            receipt = tmp_path / "evidence/done-when/TRACE-001.json"
             payload = json.loads(receipt.read_text(encoding="utf-8"))
             payload["artifact_sha256"]["trace"] = hashlib.sha256(
                 _canonical_text_bytes(trace)
@@ -708,29 +721,64 @@ class ProjectGoalContractTest(unittest.TestCase):
             {item.get("reason") for item in report["findings"]},
         )
 
-    def test_trace_rejects_noncanonical_axes_even_when_six_are_present(self) -> None:
+    def test_trace_rejects_truncated_records_despite_declared_count(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             tmp_path = Path(directory)
-            self._copy_contract(tmp_path)
-            for relative in (
-                "tests/test_phase1_simulation.py",
-                "evidence/runs/phase1-domestic-autonomy-20260828-v2/trace.jsonl",
-                "evidence/done-when/TRACE-001.json",
-            ):
-                source = ROOT / relative
-                target = tmp_path / relative
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(source.read_bytes())
-            self._activate_done_when(tmp_path, "TRACE-001")
-
-            trace = tmp_path / "evidence/runs/phase1-domestic-autonomy-20260828-v2/trace.jsonl"
+            trace, _event_log, receipt = self._prepare_trace_evidence(tmp_path)
             records = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
-            records[0]["axis_deltas"] = {f"arbitrary_{index}": index for index in range(6)}
+            trace.write_text(json.dumps(records[0], ensure_ascii=False) + "\n", encoding="utf-8")
+            payload = json.loads(receipt.read_text(encoding="utf-8"))
+            payload["artifact_sha256"]["trace"] = hashlib.sha256(
+                _canonical_text_bytes(trace)
+            ).hexdigest()
+            receipt.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            report = MODULE.build_report(tmp_path)
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "trace_result_invalid",
+            {item.get("reason") for item in report["findings"]},
+        )
+
+    def test_trace_rejects_projection_decoupled_from_event_log(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            tmp_path = Path(directory)
+            trace, event_log, receipt = self._prepare_trace_evidence(tmp_path)
+            records = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+            records[0]["action"] = "operate_with_domestic_maintenance_chain"
+            records[0]["model_rule"] = "R-DOM-04"
             trace.write_text(
                 "\n".join(json.dumps(record, ensure_ascii=False) for record in records) + "\n",
                 encoding="utf-8",
             )
-            receipt = tmp_path / "evidence/done-when/TRACE-001.json"
+            payload = json.loads(receipt.read_text(encoding="utf-8"))
+            payload["artifact_sha256"]["trace"] = hashlib.sha256(
+                _canonical_text_bytes(trace)
+            ).hexdigest()
+            receipt.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            report = MODULE.build_report(tmp_path)
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "trace_result_invalid",
+            {item.get("reason") for item in report["findings"]},
+        )
+        _ = event_log
+
+    def test_trace_rejects_noncanonical_axes_even_when_six_are_present(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            tmp_path = Path(directory)
+            trace, _event_log, receipt = self._prepare_trace_evidence(tmp_path)
+
+            records = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+            records[0]["axis_deltas"] = {f"arbitrary_{index}": index for index in range(6)}
+            records[0]["base_axis_deltas"] = {f"arbitrary_{index}": index for index in range(6)}
+            trace.write_text(
+                "\n".join(json.dumps(record, ensure_ascii=False) for record in records) + "\n",
+                encoding="utf-8",
+            )
             payload = json.loads(receipt.read_text(encoding="utf-8"))
             payload["artifact_sha256"]["trace"] = hashlib.sha256(
                 _canonical_text_bytes(trace)
@@ -741,6 +789,80 @@ class ProjectGoalContractTest(unittest.TestCase):
 
         self.assertFalse(report["contract_valid"])
         self.assertIn("TRACE-001", {item.get("value") for item in report["findings"]})
+
+    def test_replay_rejects_fixture_decoupled_from_execution_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            tmp_path = Path(directory)
+            _stored, _event_log, receipt = self._prepare_replay_evidence(tmp_path)
+            fixture = tmp_path / "fixtures/phase1_domestic_autonomy.json"
+            payload = json.loads(fixture.read_text(encoding="utf-8"))
+            payload["rounds"][0]["axis_deltas"]["public_legitimacy"] += 1
+            fixture.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            receipt_payload = json.loads(receipt.read_text(encoding="utf-8"))
+            receipt_payload["artifact_sha256"]["fixture"] = hashlib.sha256(
+                _canonical_text_bytes(fixture)
+            ).hexdigest()
+            receipt.write_text(json.dumps(receipt_payload), encoding="utf-8")
+
+            report = MODULE.build_report(tmp_path)
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "stored_run_artifacts_invalid",
+            {item.get("reason") for item in report["findings"]},
+        )
+
+    def test_replay_rejects_falsified_exogenous_provenance_or_draw(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            tmp_path = Path(directory)
+            stored, event_log, receipt = self._prepare_replay_evidence(tmp_path)
+            events = [
+                json.loads(line)
+                for line in event_log.read_text(encoding="utf-8").splitlines()
+            ]
+            events[0]["exogenous_effect"] = dict(events[0]["exogenous_effect"])
+            events[0]["exogenous_effect"]["provenance"] = "international_interface_revision"
+            events[0]["random_draw"] = 0.999
+            event_log.write_text(
+                "".join(json.dumps(event, ensure_ascii=False) + "\n" for event in events),
+                encoding="utf-8",
+            )
+            payload = json.loads(stored.read_text(encoding="utf-8"))
+            payload["canonical_result"]["events"] = events
+            event_hash = MODULE._sha256_json(events)
+            payload["event_log_hash"] = event_hash
+            payload["canonical_result"]["event_log_hash"] = event_hash
+            computed = MODULE._sha256_json(payload["canonical_result"])
+            payload["canonical_output_hash"] = computed
+            stored.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            replay = tmp_path / "evidence/runs/phase1-replay.json"
+            replay_payload = json.loads(replay.read_text(encoding="utf-8"))
+            for run in replay_payload["replays"]:
+                run["canonical_output_hash"] = computed
+            replay.write_text(json.dumps(replay_payload), encoding="utf-8")
+            # fixtureも再実行結果に合わせて更新しないとfixture再実行で落ちるため、
+            # ここではhashだけ合わせた「偽のdraw」をstored側へ残す。
+            fixture = tmp_path / "fixtures/phase1_domestic_autonomy.json"
+            receipt_payload = json.loads(receipt.read_text(encoding="utf-8"))
+            receipt_payload["result"]["canonical_output_hash"] = computed
+            for role, path in {
+                "run_manifest": replay,
+                "canonical_manifest": stored,
+                "event_log": event_log,
+                "fixture": fixture,
+            }.items():
+                receipt_payload["artifact_sha256"][role] = hashlib.sha256(
+                    _canonical_text_bytes(path)
+                ).hexdigest()
+            receipt.write_text(json.dumps(receipt_payload), encoding="utf-8")
+
+            report = MODULE.build_report(tmp_path)
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "stored_run_artifacts_invalid",
+            {item.get("reason") for item in report["findings"]},
+        )
 
     def test_missing_done_when_blocks_contract(self) -> None:
         report = self._mutated_report(
@@ -1152,7 +1274,10 @@ class ProjectGoalContractTest(unittest.TestCase):
             },
             "REPLAY-001": {
                 "test": "tests/replay_evidence.py",
+                "fixture": "fixtures/replay.json",
                 "run_manifest": "evidence/runs/replay.json",
+                "canonical_manifest": "evidence/runs/replay/run-manifest.json",
+                "event_log": "evidence/runs/replay/events.jsonl",
             },
             "BRANCH-001": {
                 "test": "tests/branch_evidence.py",
@@ -1161,6 +1286,7 @@ class ProjectGoalContractTest(unittest.TestCase):
             "TRACE-001": {
                 "test": "tests/trace_evidence.py",
                 "trace": "evidence/runs/trace.json",
+                "event_log": "evidence/runs/trace/events.jsonl",
             },
             "CLASS-001": {
                 "test": "tests/class_evidence.py",

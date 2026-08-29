@@ -25,15 +25,14 @@ AGENTS = (
     "research_and_next_generation_alliance",
     "international_partners",
 )
-# Phase 1で許可する行動。SIMULATION_DESIGNの動詞集合をdomestic fixtureへ射影したfail-closed enum。
-PHASE1_ALLOWED_ACTIONS = frozenset(
-    {
-        "allocate_to_domestic_core_components",
-        "qualify_redundant_component_supply",
-        "expand_maintainer_training",
-        "operate_with_domestic_maintenance_chain",
-    }
-)
+# Phase 1で許可する行動と、対応する遷移規則。独立な任意組合せは拒否する。
+PHASE1_ACTION_RULES = {
+    "allocate_to_domestic_core_components": "R-DOM-01",
+    "qualify_redundant_component_supply": "R-DOM-02",
+    "expand_maintainer_training": "R-DOM-03",
+    "operate_with_domestic_maintenance_chain": "R-DOM-04",
+}
+PHASE1_ALLOWED_ACTIONS = frozenset(PHASE1_ACTION_RULES)
 CLASSIFICATION = {
     "record_kind": "simulated_transition",
     "epistemic_class": "model_assumption",
@@ -93,8 +92,11 @@ def validate_fixture(data: dict[str, Any]) -> None:
     for index, item in enumerate(data["rounds"], start=1):
         if not item.get("action") or not item.get("rule_id") or not item.get("evidence_ref"):
             raise SimulationError(f"round {index} lacks trace fields")
-        if item.get("action") not in PHASE1_ALLOWED_ACTIONS:
+        expected_rule = PHASE1_ACTION_RULES.get(item.get("action"))
+        if expected_rule is None:
             raise SimulationError(f"round {index} action is not a Phase 1 allowed action")
+        if item.get("rule_id") != expected_rule:
+            raise SimulationError(f"round {index} rule_id does not match action")
         if item.get("actor") not in AGENTS:
             raise SimulationError(f"round {index} actor is not a canonical agent")
         if not isinstance(item.get("exogenous_event"), str) or not item["exogenous_event"].strip():
@@ -117,14 +119,14 @@ def _apply_deltas(axes: dict[str, int], deltas: dict[str, int]) -> dict[str, int
     return after
 
 
-def _deterministic_draw(seed: int, year: int, exogenous_event: str) -> float:
+def deterministic_draw(seed: int, year: int, exogenous_event: str) -> float:
     """seedとround入力から、環境非依存の[0, 1) drawを生成する。"""
     material = canonical_json({"seed": seed, "year": year, "exogenous_event": exogenous_event})
     numerator = int.from_bytes(hashlib.sha256(material.encode("utf-8")).digest()[:8], "big")
     return numerator / 2**64
 
 
-def _realize_exogenous_effect(event: str, random_draw: float) -> dict[str, int | str]:
+def realize_exogenous_effect(event: str, random_draw: float) -> dict[str, int | str]:
     modifier = -1 if random_draw < 1 / 3 else 0 if random_draw < 2 / 3 else 1
     return {"axis": EXOGENOUS_EVENT_AXES[event], "modifier": modifier}
 
@@ -177,7 +179,7 @@ def run_simulation(fixture: dict[str, Any]) -> dict[str, Any]:
         {
             "year": item["year"],
             "event": item["exogenous_event"],
-            "random_draw": _deterministic_draw(fixture["seed"], item["year"], item["exogenous_event"]),
+            "random_draw": deterministic_draw(fixture["seed"], item["year"], item["exogenous_event"]),
         }
         for item in fixture["rounds"]
     ]
@@ -194,7 +196,7 @@ def run_simulation(fixture: dict[str, Any]) -> dict[str, Any]:
     events: list[dict[str, Any]] = []
     for turn_id, item in enumerate(fixture["rounds"], start=1):
         before = deepcopy(state["axes"])
-        exogenous_effect = _realize_exogenous_effect(
+        exogenous_effect = realize_exogenous_effect(
             item["exogenous_event"], exogenous_event_stream[turn_id - 1]["random_draw"]
         )
         exogenous_effect["provenance"] = item["exogenous_event"]

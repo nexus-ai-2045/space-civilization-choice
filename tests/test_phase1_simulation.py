@@ -46,31 +46,46 @@ def test_different_seed_changes_seeded_exogenous_stream_and_event_log():
 
 
 @pytest.mark.parametrize(
-    ("field", "replacement", "hash_must_change"),
+    ("mutator", "hash_must_change"),
     [
-        ("action", "qualify_redundant_component_supply", False),
-        ("exogenous_event", "single_supplier_disruption", True),
         (
-            "axis_deltas",
-            {
-                axis: 0
-                for axis in (
-                    "access_and_operation",
-                    "industrial_reproduction",
-                    "rule_shaping",
-                    "knowledge_continuity",
-                    "relationship_choice",
-                    "public_legitimacy",
-                )
-            },
+            lambda fixture: (
+                fixture["rounds"][0].__setitem__(
+                    "action", "qualify_redundant_component_supply"
+                ),
+                fixture["rounds"][0].__setitem__("rule_id", "R-DOM-02"),
+            ),
+            False,
+        ),
+        (
+            lambda fixture: fixture["rounds"][0].__setitem__(
+                "exogenous_event", "single_supplier_disruption"
+            ),
+            True,
+        ),
+        (
+            lambda fixture: fixture["rounds"][0].__setitem__(
+                "axis_deltas",
+                {
+                    axis: 0
+                    for axis in (
+                        "access_and_operation",
+                        "industrial_reproduction",
+                        "rule_shaping",
+                        "knowledge_continuity",
+                        "relationship_choice",
+                        "public_legitimacy",
+                    )
+                },
+            ),
             False,
         ),
     ],
 )
-def test_scenario_snapshot_hash_binds_shared_inputs_only(field, replacement, hash_must_change):
+def test_scenario_snapshot_hash_binds_shared_inputs_only(mutator, hash_must_change):
     first_fixture = load_fixture(FIXTURE)
     second_fixture = load_fixture(FIXTURE)
-    second_fixture["rounds"][0][field] = replacement
+    mutator(second_fixture)
 
     first = run_simulation(first_fixture)
     second = run_simulation(second_fixture)
@@ -80,9 +95,9 @@ def test_scenario_snapshot_hash_binds_shared_inputs_only(field, replacement, has
     else:
         assert first["manifest"]["scenario_snapshot_hash"] == second["manifest"]["scenario_snapshot_hash"]
         assert first["event_log_hash"] != second["event_log_hash"]
-    assert first["manifest"]["deterministic_execution_input_hash"] != second["manifest"][
-        "deterministic_execution_input_hash"
-    ]
+        assert first["manifest"]["deterministic_execution_input_hash"] != second["manifest"][
+            "deterministic_execution_input_hash"
+        ]
 
 
 def test_common_scenario_snapshot_excludes_branch_specific_fields():
@@ -180,6 +195,16 @@ def test_fixture_rejects_unknown_action():
     data["rounds"][0]["action"] = "launch_attack"
 
     with pytest.raises(SimulationError, match="Phase 1 allowed action"):
+        run_simulation(data)
+
+
+def test_fixture_rejects_action_rule_mismatch():
+    data = load_fixture(FIXTURE)
+    data["rounds"][0]["action"] = "operate_with_domestic_maintenance_chain"
+    # Keep R-DOM-01 from the original turn-1 fixture while swapping the action.
+    data["rounds"][0]["rule_id"] = "R-DOM-01"
+
+    with pytest.raises(SimulationError, match="rule_id does not match action"):
         run_simulation(data)
 
 
