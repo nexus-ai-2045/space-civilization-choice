@@ -34,7 +34,7 @@ goal_id: space-civilization-choice-mvp-v1
 - `2026 → 2030 → 2035 → 2040`の四ラウンド
 - 物理・物質、経済・産業・組織、認知・文化・意味から、一本の連鎖を検証するMVP最小接続
 - 六観測軸、モデル内部遷移trace、研究根拠台帳、model card、run manifest
-- LLMなしで再生できる決定論的コアと、MVP後の限定的なLLM提案
+- LLMなしで再生できる決定論的コアと、ADR-0008で境界を固定したハッカソン用の限定的なLLM提案
 - 深い不確実性下で、単一予測ではなく脆弱性、後悔、選択肢保持を比較する方法
 
 ## 非目標
@@ -86,8 +86,9 @@ goal_id: space-civilization-choice-mvp-v1
 ## 現在の達成状態
 
 - `status`: active
-- Phase 1の一分岐fixture、決定論的replay、model_internal trace、exact HEAD CI receiptを実装済み
-- 三分岐比較、外生event共有、model card、感度分析、UIは未実装
+- Phase 1の決定論的replay、model_internal trace、exact HEAD CI receiptを実装済み
+- ハッカソンdemo sliceとして三分岐比較、限定AI提案、最小Web UIを実装中
+- model card、感度分析、完成版UI、人間評価は未実装
 - 上記チェック項目は、対応する一次証拠が揃うまで未完了のまま保持する
 
 ## 最小PDCAとフィードバックループ

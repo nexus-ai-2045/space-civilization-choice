@@ -18,6 +18,16 @@ SPEC.loader.exec_module(MODULE)
 
 
 class ProjectGoalContractTest(unittest.TestCase):
+    def test_artifact_hash_bytes_are_os_independent_for_text(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "receipt.json"
+            path.write_bytes(b'{"ok": true}\r\n')
+
+            self.assertEqual(
+                MODULE._canonical_artifact_bytes(path),
+                b'{"ok": true}\n',
+            )
+
     def _copy_contract(self, destination: Path) -> None:
         for relative in MODULE.REQUIRED_FILES:
             path = destination / relative
@@ -95,7 +105,9 @@ class ProjectGoalContractTest(unittest.TestCase):
             "status": "passed",
             "artifacts": artifacts,
             "artifact_sha256": {
-                role: hashlib.sha256((repo / target).read_bytes()).hexdigest()
+                role: hashlib.sha256(
+                    MODULE._canonical_artifact_bytes(repo / target)
+                ).hexdigest()
                 for role, target in artifacts.items()
             },
         }

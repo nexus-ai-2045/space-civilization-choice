@@ -1,0 +1,16 @@
+{
+  "scenario_snapshot_id": "jp-space-choice-2026-phase1-v1",
+  "model_version": "phase1-rule-model-v1",
+  "seed": 20260828,
+  "branch": "international_integration",
+  "initial_state": {
+    "axes": {"access_and_operation": 40, "industrial_reproduction": 35, "rule_shaping": 30, "knowledge_continuity": 45, "relationship_choice": 40, "public_legitimacy": 50},
+    "agents": {"policy_allocator": {"capacity": 50}, "domestic_exploration_alliance": {"capacity": 45}, "transport_and_components_alliance": {"capacity": 35}, "research_and_next_generation_alliance": {"capacity": 40}, "international_partners": {"capacity": 55}}
+  },
+  "rounds": [
+    {"year": 2026, "actor": "international_partners", "action": "qualify_redundant_component_supply", "exogenous_event": "budget_focus_required", "rule_id": "R-INT-01", "evidence_ref": "model-assumption:phase1-international-allocation", "axis_deltas": {"access_and_operation": 7, "industrial_reproduction": 1, "rule_shaping": 5, "knowledge_continuity": 2, "relationship_choice": 7, "public_legitimacy": 2}},
+    {"year": 2030, "actor": "transport_and_components_alliance", "action": "qualify_redundant_component_supply", "exogenous_event": "single_supplier_disruption", "rule_id": "R-INT-02", "evidence_ref": "model-assumption:phase1-international-supply", "axis_deltas": {"access_and_operation": 6, "industrial_reproduction": 2, "rule_shaping": 4, "knowledge_continuity": 1, "relationship_choice": 6, "public_legitimacy": 1}},
+    {"year": 2035, "actor": "research_and_next_generation_alliance", "action": "expand_maintainer_training", "exogenous_event": "experienced_workforce_retirement", "rule_id": "R-INT-03", "evidence_ref": "model-assumption:phase1-international-knowledge", "axis_deltas": {"access_and_operation": 3, "industrial_reproduction": 1, "rule_shaping": 5, "knowledge_continuity": 5, "relationship_choice": 5, "public_legitimacy": 2}},
+    {"year": 2040, "actor": "international_partners", "action": "operate_with_domestic_maintenance_chain", "exogenous_event": "international_interface_revision", "rule_id": "R-INT-04", "evidence_ref": "model-assumption:phase1-international-operation", "axis_deltas": {"access_and_operation": 6, "industrial_reproduction": 0, "rule_shaping": 6, "knowledge_continuity": 2, "relationship_choice": 6, "public_legitimacy": 1}}
+  ]
+}

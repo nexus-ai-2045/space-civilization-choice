@@ -367,6 +367,14 @@ def _is_digest(value: Any, length: int = 64) -> bool:
     )
 
 
+def _canonical_artifact_bytes(path: Path) -> bytes:
+    """Gitの改行変換に左右されない証拠hash入力を返す。"""
+    data = path.read_bytes()
+    if path.suffix.lower() in {".json", ".jsonl", ".md", ".py", ".yml", ".yaml"}:
+        return data.replace(b"\r\n", b"\n")
+    return data
+
+
 def _positive_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
@@ -1169,9 +1177,7 @@ def _validate_done_when_evidence(
             )
             continue
         resolved_artifacts[role] = resolved
-        artifact_bytes = resolved.read_bytes()
-        if role in {"canonical_manifest", "event_log", "trace"}:
-            artifact_bytes = artifact_bytes.replace(b"\r\n", b"\n")
+        artifact_bytes = _canonical_artifact_bytes(resolved)
         actual_hash = hashlib.sha256(artifact_bytes).hexdigest()
         expected_hash = artifact_hashes.get(role)
         if not _is_digest(expected_hash) or expected_hash != actual_hash:

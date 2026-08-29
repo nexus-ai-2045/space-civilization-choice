@@ -59,6 +59,12 @@ branch-neutral schemaの固定とmodel card初版はPhase 2着手前に行う。
 
 完了条件: 15〜25分の体験で、結末ではなくモデル内因果とトレードオフを説明できる。
 
+### 2026-08-29 demo vertical slice
+
+時間制約下のハッカソン実演に限り、Phase 2の三分岐、Phase 3の最小比較画面、Phase 4の単一AI提案を
+縦切りで前倒しする。決定論コアを実行権威とし、AI障害時にも同じ入力から完走する。これは各Phaseの
+完全な完了や公開deployを意味しない。判断境界は[ADR-0008](adr/0008-hackathon-ai-demo-slice.md)を正本とする。
+
 ## 各phase共通の最小PDCA
 
 1. Plan: 対象done_when ID、仮説、owner、入力hash、許容範囲を固定する。

@@ -34,6 +34,12 @@ PHASE1_ALLOWED_ACTIONS = frozenset(
         "operate_with_domestic_maintenance_chain",
     }
 )
+ACTION_EFFECTS = {
+    "allocate_to_domestic_core_components": {"industrial_reproduction": 3, "relationship_choice": -1},
+    "qualify_redundant_component_supply": {"access_and_operation": 3, "industrial_reproduction": 1},
+    "expand_maintainer_training": {"knowledge_continuity": 3, "public_legitimacy": 1},
+    "operate_with_domestic_maintenance_chain": {"access_and_operation": 2, "rule_shaping": -1},
+}
 CLASSIFICATION = {
     "record_kind": "simulated_transition",
     "epistemic_class": "model_assumption",
@@ -115,6 +121,18 @@ def _apply_deltas(axes: dict[str, int], deltas: dict[str, int]) -> dict[str, int
             raise SimulationError(f"axis out of range after transition: {axis}")
         after[axis] = value
     return after
+
+
+def apply_action_effect(action: str, base_deltas: dict[str, int]) -> dict[str, int]:
+    """許可済みactionをコア所有の規則でdeltaへ変換する。"""
+    if action not in PHASE1_ALLOWED_ACTIONS or action not in ACTION_EFFECTS:
+        raise SimulationError("action has no canonical effect rule")
+    if set(base_deltas) != set(AXES) or any(not _is_int(value) for value in base_deltas.values()):
+        raise SimulationError("base deltas must contain six integer axes")
+    effective = deepcopy(base_deltas)
+    for axis, delta in ACTION_EFFECTS[action].items():
+        effective[axis] += delta
+    return effective
 
 
 def _deterministic_draw(seed: int, year: int, exogenous_event: str) -> float:

@@ -15,8 +15,8 @@
 </div>
 
 > [!IMPORTANT]
-> 現在はハッカソン応募候補の**Phase 1実装版**です。国内自立型の決定論的fixtureだけを
-> 実行できます。三分岐比較やUIは未実装で、政府・JAXA・主催者の公式見解でもありません。
+> 現在はハッカソン用の**AIシミュレーターdemo slice**です。三分岐×4ラウンド、限定AI提案、
+> 比較UIをローカル実行できます。完成版MVPや政府・JAXA・主催者の公式見解ではありません。
 
 ## 目的
 
@@ -110,9 +110,9 @@ flowchart LR
 |---|---|---|
 | **0 公開設計** | ゴール、仕様、ADR、根拠台帳、安全境界 | **main公開済み／運用契約更新はreview待ち** |
 | **1 決定論的fixture** | 状態schema、event log、同一seed replay | **完了条件達成（一分岐replay＋trace）** |
-| **2 三分岐比較** | 共通外生event、六観測軸、感度分析 | 未着手 |
-| **3 UI** | 分岐比較、モデル内因果trace、証拠台帳 | 未着手 |
-| **4 限定LLM** | schema検証された行動提案 | 未着手 |
+| **2 三分岐比較** | 共通外生event、六観測軸、感度分析 | **demo slice実装／感度分析は残務** |
+| **3 UI** | 分岐比較、モデル内因果trace、証拠台帳 | **最小ローカルUI実装** |
+| **4 限定LLM** | schema検証された行動提案 | **demo slice実装** |
 | **5 demo評価** | 人間レビュー、説明可能性eval | 未着手 |
 
 Phase 1として、国内自立型の1 branch × 4 round fixtureをLLMなしで再生し、同一入力の
@@ -139,21 +139,22 @@ canonical output hash一致と六軸deltaのmodel_internal traceまで実装し�
 
 ### ローカル検査
 
-プロダクトは未実装ですが、ゴール契約と公開境界は検査できます。
+ゴール契約、決定論コア、三分岐比較、ローカルWebデモを検査・実行できます。
 
 ```powershell
 py -3.13 -m pytest -q
 py -3.13 scripts/check_project_goal.py --json
 py -3.13 scripts/run_phase1_fixture.py
+py -3.13 scripts/run_hackathon_demo.py
 py -3.13 scripts/check_operational_adoption.py --json
 
 $ratchet = Join-Path $env:APPDATA 'Python\Python313\Scripts\ai-ratchet-gate.exe'
 & $ratchet --repo .
 ```
 
-fixture runnerはmanifest、4件のevent、event log hash、canonical output hash、model_internal
-traceをJSONで返します。これは一分岐の再現性とtraceだけを示し、三分岐比較、プロダクトMVPの完成、
-公開許可を意味しません。
+ブラウザで`http://127.0.0.1:8000`を開き、AIシミュレーションを実行します。`OPENAI_API_KEY`が
+設定されていればResponses APIを使い、未設定・timeout・不正応答なら決定論fallbackで完走します。
+API keyはブラウザへ渡しません。このdemoは完成版MVPや公開許可を意味しません。
 
 ## 制約
 
