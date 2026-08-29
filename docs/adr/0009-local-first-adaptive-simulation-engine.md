@@ -44,6 +44,8 @@ parameter registry
 
 外部providerには`ProposalProvider`境界を設ける。timeout、接続失敗（ConnectionError / URLError）、
 schema不正、allowlist外、size超過時は同一入力のローカルproviderへfallbackする。
+コアはprovider呼び出しに所有deadlineを課し、provider自身がTimeoutErrorを上げなくても
+hanging I/Oを`TimeoutError`へ写像してlocal fallbackする。
 `provenance_type`はprovider応答ではなく、設定されたprovider identityからコアが割り当てる。
 providerへ渡すstate / parametersは防御的コピーとし、遷移に使うオブジェクトはコアが保持する。
 provider ID、model ID、provider version、request hash、response hash、validation state、

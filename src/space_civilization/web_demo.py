@@ -115,6 +115,13 @@ def _trace_rows(round_item: dict[str, Any]) -> list[str]:
     accepted_ids = ", ".join(item["action_id"] for item in round_item["accepted_actions"]) or "採択なし"
     rows = [f'{round_item["year"]}: {accepted_ids}']
     rows.extend(
+        (
+            f'{round_item["year"]}: {event["rule_id"]} {event["axis"]} '
+            f'attempted={event["attempted_delta"]:+d} applied={event["applied_delta"]:+d}'
+        )
+        for event in round_item.get("transition_saturations", [])
+    )
+    rows.extend(
         f'{round_item["year"]}: {event["rule_id"]} {event["axis"]} {event["delta"]:+d}'
         for event in round_item["uncertainty_events"]
     )

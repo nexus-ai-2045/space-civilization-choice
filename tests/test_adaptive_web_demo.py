@@ -89,3 +89,36 @@ def test_fallback_ui_route_returns_branch_payload(monkeypatch, tmp_path):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_displayed_trace_includes_saturation_records():
+    params = expand_preset("balanced")
+    params["domestic_supply"] = 100
+    params["industrial_capacity"] = 100
+    # Keep allocations summing to 100 after boosting domestic_supply.
+    params["transport"] = 0
+    params["autonomy"] = 0
+    params["life_support"] = 0
+    params["energy"] = 0
+    params["people_research"] = 0
+    params["international_connection"] = 0
+    params["open_platform"] = 0
+    # Rebalance: domestic_supply already 100; others 0 => sum 100.
+    params["supply_disruption"] = 0
+    result = build_adaptive_demo(params, seed=9)
+    saturations = [
+        event
+        for round_item in result["simulation"]["rounds"]
+        for event in round_item["transition_saturations"]
+    ]
+    assert saturations, "fixture must produce at least one BOUND-* saturation"
+    joined = "\n".join(row for view in result["rounds"] for row in view["trace"])
+    assert any(event["rule_id"] in joined for event in saturations)
+    assert "attempted=" in joined and "applied=" in joined
+
+
+def test_constellation_scene_destroys_children_on_redraw():
+    source = (web_demo.REPO_ROOT / "frontend/src/ConstellationScene.ts").read_text(encoding="utf-8")
+    assert "killAll()" in source
+    assert "destroy(true)" in source
+    assert "removeAll(true)" not in source or "clearDisplayObjects" in source

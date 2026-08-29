@@ -174,3 +174,36 @@ def test_every_parameter_changes_model_state_or_uncertainty_trace():
             or [item["uncertainty_events"] for item in result["rounds"]]
             != [item["uncertainty_events"] for item in baseline_result["rounds"]]
         ), key
+
+
+class HangingProvider:
+    provider_id = "external_hanging_v1"
+
+    def propose(self, **kwargs):
+        import time
+
+        # Exceeds the core-owned deadline without raising TimeoutError itself.
+        time.sleep(1)
+        return {
+            "agent_id": kwargs["agent_id"],
+            "action_id": "train_people",
+            "priority": 0,
+            "rationale": "should never return before deadline",
+        }
+
+
+def test_core_owned_deadline_falls_back_when_provider_hangs():
+    result = run_adaptive_simulation(
+        expand_preset("balanced"),
+        seed=6,
+        provider=HangingProvider(),
+        provider_timeout_seconds=0.05,
+    )
+    assert len(result["rounds"]) == 4
+    assert all(len(item["provider_errors"]) == 5 for item in result["rounds"])
+    assert {error["error"] for item in result["rounds"] for error in item["provider_errors"]} == {"TimeoutError"}
+    assert all(
+        proposal["provenance_type"] == "deterministic_core"
+        for item in result["rounds"]
+        for proposal in item["proposals"]
+    )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import urllib.error
 from copy import deepcopy
 
@@ -28,8 +29,47 @@ _PROVIDER_FALLBACK_ERRORS = (
     urllib.error.URLError,
 )
 
+# Core-owned deadline so hanging I/O cannot block the deterministic run.
+DEFAULT_PROVIDER_TIMEOUT_SECONDS = 2.0
+
 THREE_PHASE_CHAIN = ("cognitive_cultural", "economic_organizational", "physical_material", "cognitive_cultural")
 
+
+def _propose_with_deadline(
+    provider: ProposalProvider,
+    *,
+    timeout_seconds: float,
+    agent_id: str,
+    year: int,
+    seed: int,
+    state: dict,
+    parameters: dict,
+) -> dict:
+    """Invoke a provider behind a core-owned deadline; hanging I/O becomes TimeoutError."""
+    if timeout_seconds <= 0:
+        raise ValueError("provider timeout must be positive")
+    # Local deterministic proposals are sync and immediate; skip thread hop.
+    if getattr(provider, "provider_id", None) == DeterministicProposalProvider.provider_id:
+        return provider.propose(
+            agent_id=agent_id, year=year, seed=seed, state=state, parameters=parameters
+        )
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        future = executor.submit(
+            provider.propose,
+            agent_id=agent_id,
+            year=year,
+            seed=seed,
+            state=state,
+            parameters=parameters,
+        )
+        try:
+            return future.result(timeout=timeout_seconds)
+        except concurrent.futures.TimeoutError as error:
+            future.cancel()
+            raise TimeoutError("provider proposal exceeded core-owned deadline") from error
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 def _initial_axes(parameters: dict[str, int]) -> dict[str, int]:
     return {
@@ -113,7 +153,13 @@ def _apply_uncertainty(axes: dict[str, int], parameters: dict[str, int], year: i
     return result, events
 
 
-def run_adaptive_simulation(parameters: dict[str, int], *, seed: int, provider: ProposalProvider | None = None) -> dict:
+def run_adaptive_simulation(
+    parameters: dict[str, int],
+    *,
+    seed: int,
+    provider: ProposalProvider | None = None,
+    provider_timeout_seconds: float = DEFAULT_PROVIDER_TIMEOUT_SECONDS,
+) -> dict:
     if type(seed) is not int:
         raise ValueError("seed must be a strict integer")
     checked = validate_parameters(parameters)
@@ -133,7 +179,9 @@ def run_adaptive_simulation(parameters: dict[str, int], *, seed: int, provider: 
             state_view = deepcopy(before)
             parameter_view = deepcopy(checked)
             try:
-                proposal = active_provider.propose(
+                proposal = _propose_with_deadline(
+                    active_provider,
+                    timeout_seconds=provider_timeout_seconds,
                     agent_id=agent_id,
                     year=year,
                     seed=seed,
