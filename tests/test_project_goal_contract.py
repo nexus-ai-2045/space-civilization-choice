@@ -351,6 +351,40 @@ class ProjectGoalContractTest(unittest.TestCase):
             {item["code"] for item in report["findings"]},
         )
 
+    def test_trace_rejects_noncanonical_axes_even_when_six_are_present(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            tmp_path = Path(directory)
+            self._copy_contract(tmp_path)
+            for relative in (
+                "tests/test_phase1_simulation.py",
+                "evidence/runs/phase1-domestic-autonomy-20260828-v2/trace.jsonl",
+                "evidence/done-when/TRACE-001.json",
+            ):
+                source = ROOT / relative
+                target = tmp_path / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(source.read_bytes())
+            self._activate_done_when(tmp_path, "TRACE-001")
+
+            trace = tmp_path / "evidence/runs/phase1-domestic-autonomy-20260828-v2/trace.jsonl"
+            records = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+            records[0]["axis_deltas"] = {f"arbitrary_{index}": index for index in range(6)}
+            trace.write_text(
+                "\n".join(json.dumps(record, ensure_ascii=False) for record in records) + "\n",
+                encoding="utf-8",
+            )
+            receipt = tmp_path / "evidence/done-when/TRACE-001.json"
+            payload = json.loads(receipt.read_text(encoding="utf-8"))
+            payload["artifact_sha256"]["trace"] = hashlib.sha256(
+                _canonical_text_bytes(trace)
+            ).hexdigest()
+            receipt.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            report = MODULE.build_report(tmp_path)
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn("TRACE-001", {item.get("value") for item in report["findings"]})
+
     def test_missing_done_when_blocks_contract(self) -> None:
         report = self._mutated_report(
             "PROJECT_GOAL.md",

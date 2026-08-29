@@ -47,6 +47,16 @@ REQUIRED_CI_JOBS = (
     "ratchet (ubuntu-latest)",
     "ratchet (windows-latest)",
 )
+CANONICAL_TRACE_AXES = frozenset(
+    {
+        "access_and_operation",
+        "industrial_reproduction",
+        "rule_shaping",
+        "knowledge_continuity",
+        "relationship_choice",
+        "public_legitimacy",
+    }
+)
 LiveVerifier = Callable[[str, dict[str, Any]], dict[str, Any]]
 HeadResolver = Callable[[Path], str]
 PersonalPathScanner = Callable[[Path], tuple[bool, list[str]]]
@@ -785,8 +795,10 @@ def _validate_done_when_artifact_contents(
                     record.get(field) not in (None, "", [], {}) for field in required
                 )
                 valid = valid and record.get("causal_scope") == "model_internal"
-                valid = valid and isinstance(record.get("axis_deltas"), dict)
-                valid = valid and len(record["axis_deltas"]) == 6
+                axis_deltas = record.get("axis_deltas")
+                valid = valid and isinstance(axis_deltas, dict)
+                valid = valid and set(axis_deltas) == CANONICAL_TRACE_AXES
+                valid = valid and all(type(delta) is int for delta in axis_deltas.values())
                 if not valid:
                     break
         if not valid:
