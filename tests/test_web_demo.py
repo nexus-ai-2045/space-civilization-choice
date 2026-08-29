@@ -38,6 +38,17 @@ def test_ai_action_changes_the_simulated_state(monkeypatch):
     assert training["final_axis_comparison"] != supply["final_axis_comparison"]
 
 
+def test_adaptive_override_preserves_base_rule_and_uses_distinct_rule(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    result = build_demo_result()
+    for branch, run in result["branches"].items():
+        first = run["events"][0]
+        assert first["rule_id"] == f"R-ADAPT-{branch}-2026"
+        assert first["base_rule_id"].startswith(("R-DOM-", "R-INT-", "R-OPEN-"))
+        assert first["base_action"]
+        assert run["trace"][0]["base_model_rule"] == first["base_rule_id"]
+
+
 def test_replacing_fixture_action_removes_prior_action_effect():
     base = {axis: 0 for axis in AXES}
     base["industrial_reproduction"] = 8

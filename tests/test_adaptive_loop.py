@@ -220,3 +220,43 @@ def test_core_owned_deadline_falls_back_when_provider_hangs():
         for item in result["rounds"]
         for proposal in item["proposals"]
     )
+
+
+class NonSerializableProvider:
+    provider_id = "external_nonserializable_v1"
+
+    def __init__(self):
+        self.callback = lambda: None
+
+    def propose(self, **kwargs):
+        raise AssertionError("must not execute")
+
+
+def test_nonserializable_provider_falls_back_and_is_audited():
+    result = run_adaptive_simulation(
+        expand_preset("balanced"), seed=8, provider=NonSerializableProvider()
+    )
+    assert all(len(item["provider_errors"]) == 5 for item in result["rounds"])
+    assert all(
+        audit["validation_state"] == "fallback_after_provider_error"
+        and audit["fallback_used"]
+        and len(audit["request_hash"]) == 64
+        and audit["response_hash"] is None
+        for item in result["rounds"]
+        for audit in item["provider_audit"]
+    )
+
+
+def test_external_provider_manifest_binds_identity_and_hashes():
+    result = run_adaptive_simulation(
+        expand_preset("balanced"), seed=9, provider=SpoofedProvenanceProvider()
+    )
+    assert result["provider_manifest"]["provider_id"] == "external_spoof_v1"
+    assert all(
+        audit["provider_id"] == "external_spoof_v1"
+        and len(audit["request_hash"]) == 64
+        and len(audit["response_hash"]) == 64
+        and audit["validation_state"] == "accepted_for_run"
+        for item in result["rounds"]
+        for audit in item["provider_audit"]
+    )

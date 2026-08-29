@@ -50,6 +50,20 @@ ACTION_EFFECTS = {
     "operate_with_domestic_maintenance_chain": {"access_and_operation": 2, "rule_shaping": -1},
 }
 HACKATHON_DEMO_BRANCHES = frozenset({"international_integration", "open_platform"})
+HACKATHON_BRANCH_RULES = {
+    "international_integration": {
+        "R-INT-01": ("qualify_redundant_component_supply", (7, 1, 5, 2, 7, 2)),
+        "R-INT-02": ("qualify_redundant_component_supply", (6, 2, 4, 1, 6, 1)),
+        "R-INT-03": ("expand_maintainer_training", (3, 1, 5, 5, 5, 2)),
+        "R-INT-04": ("operate_with_domestic_maintenance_chain", (6, 0, 6, 2, 6, 1)),
+    },
+    "open_platform": {
+        "R-OPEN-01": ("allocate_to_domestic_core_components", (4, 3, 6, 5, 4, 5)),
+        "R-OPEN-02": ("qualify_redundant_component_supply", (5, 4, 5, 3, 4, 3)),
+        "R-OPEN-03": ("expand_maintainer_training", (3, 3, 4, 7, 3, 4)),
+        "R-OPEN-04": ("operate_with_domestic_maintenance_chain", (4, 3, 5, 4, 4, 4)),
+    },
+}
 CLASSIFICATION = {
     "record_kind": "simulated_transition",
     "epistemic_class": "model_assumption",
@@ -151,14 +165,35 @@ def validate_fixture(data: dict[str, Any], *, allow_hackathon_demo_branches: boo
         deltas = item.get("axis_deltas", {})
         if set(deltas) != set(AXES) or any(not _is_int(v) for v in deltas.values()):
             raise SimulationError(f"round {index} axis_deltas invalid")
-        # Phase 1 domesticは遷移規則へ厳密に束縛する。ハッカソンdemo分岐はallowlistのみ。
+        # 全分岐をそれぞれのcanonical transition ruleへ厳密に束縛する。
         if branch == "domestic_autonomy":
-            transition_rule = PHASE1_TRANSITION_RULES[item["action"]]
-            expected_deltas = dict(zip(AXES, transition_rule["axis_deltas"], strict=True))
-            if item.get("rule_id") != transition_rule["rule_id"] or deltas != expected_deltas:
-                raise SimulationError(
-                    f"round {index} does not match transition rule for action {item['action']}"
-                )
+            canonical = PHASE1_TRANSITION_RULES[item.get("base_action", item["action"])]
+            expected_rule_id = canonical["rule_id"]
+            expected_action = item.get("base_action", item["action"])
+            expected_values = canonical["axis_deltas"]
+        else:
+            expected_rule_id = item.get("base_rule_id", item["rule_id"])
+            branch_rule = HACKATHON_BRANCH_RULES[branch].get(expected_rule_id)
+            if branch_rule is None:
+                raise SimulationError(f"round {index} has no canonical branch transition rule")
+            expected_action, expected_values = branch_rule
+        base_action = item.get("base_action", item["action"])
+        base_deltas = item.get("base_axis_deltas", deltas)
+        expected_deltas = dict(zip(AXES, expected_values, strict=True))
+        if base_action != expected_action or base_deltas != expected_deltas:
+            raise SimulationError(
+                f"round {index} does not match transition rule for canonical branch"
+            )
+        if "base_action" in item:
+            expected_adaptive_rule = f"R-ADAPT-{branch}-{item['year']}"
+            if item.get("rule_id") != expected_adaptive_rule:
+                raise SimulationError(f"round {index} adaptive rule_id invalid")
+            if deltas != replace_action_effect(base_action, item["action"], base_deltas):
+                raise SimulationError(f"round {index} adaptive action effect invalid")
+        elif item.get("rule_id") != expected_rule_id or item["action"] != expected_action:
+            raise SimulationError(
+                f"round {index} does not match transition rule for canonical branch"
+            )
 
 
 def apply_action_effect(action: str, base_deltas: dict[str, int]) -> dict[str, int]:
@@ -230,8 +265,7 @@ def build_model_internal_trace(events: list[dict[str, Any]]) -> list[dict[str, A
     """event logからTRACE-001用のmodel_internal投影を作る。"""
     records: list[dict[str, Any]] = []
     for event in events:
-        records.append(
-            {
+        record = {
                 "turn_id": event["turn_id"],
                 "inputs": deepcopy(event["input"]),
                 "action": event["action"],
@@ -243,7 +277,10 @@ def build_model_internal_trace(events: list[dict[str, Any]]) -> list[dict[str, A
                 "exogenous_effect": deepcopy(event["exogenous_effect"]),
                 "random_draw": event["random_draw"],
             }
-        )
+        if event.get("base_rule_id") is not None:
+            record["base_model_rule"] = event["base_rule_id"]
+            record["base_action"] = event["base_action"]
+        records.append(record)
     return records
 
 
@@ -299,8 +336,7 @@ def run_simulation(fixture: dict[str, Any], *, allow_hackathon_demo_branches: bo
         effective_deltas[exogenous_effect["axis"]] += exogenous_effect["modifier"]
         after = _apply_deltas(before, effective_deltas)
         state["axes"] = after
-        events.append(
-            {
+        event = {
                 "turn_id": turn_id,
                 "year": item["year"],
                 "actor": item["actor"],
@@ -316,7 +352,10 @@ def run_simulation(fixture: dict[str, Any], *, allow_hackathon_demo_branches: bo
                 "random_draw": exogenous_event_stream[turn_id - 1]["random_draw"],
                 **CLASSIFICATION,
             }
-        )
+        if item.get("base_rule_id") is not None:
+            event["base_rule_id"] = item["base_rule_id"]
+            event["base_action"] = item["base_action"]
+        events.append(event)
     event_log_hash = sha256_json(events)
     result = {"manifest": manifest, "final_state": state, "events": events, "event_log_hash": event_log_hash}
     # hash対象はPhase 1のstored run契約（manifest/state/events）に固定する。

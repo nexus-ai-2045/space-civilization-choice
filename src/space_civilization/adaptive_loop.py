@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import multiprocessing
+import pickle
 import urllib.error
 from copy import deepcopy
 from multiprocessing.context import BaseContext
@@ -111,7 +112,12 @@ def _propose_with_deadline(
         daemon=True,
         name=f"scc-provider-{agent_id}-{year}",
     )
-    process.start()
+    try:
+        # Fail before spawning so serialization failures are deterministic and auditable.
+        pickle.dumps((provider, kwargs))
+        process.start()
+    except (pickle.PickleError, AttributeError, TypeError) as error:
+        raise ValueError("provider is not serializable for isolated execution") from error
     process.join(timeout_seconds)
     if process.is_alive():
         _terminate_provider_process(process)
@@ -224,6 +230,11 @@ def run_adaptive_simulation(
         raise ValueError("seed must be a strict integer")
     checked = validate_parameters(parameters)
     active_provider = provider or DeterministicProposalProvider()
+    provider_identity = {
+        "provider_id": str(getattr(active_provider, "provider_id", type(active_provider).__name__)),
+        "model_id": getattr(active_provider, "model_id", None),
+        "model_version": getattr(active_provider, "model_version", None),
+    }
     provenance_type = derive_provenance_type(active_provider)
     local_provider = DeterministicProposalProvider()
     local_provenance = derive_provenance_type(local_provider)
@@ -234,10 +245,19 @@ def run_adaptive_simulation(
         before = deepcopy(axes)
         proposals = []
         provider_errors = []
+        provider_audit = []
         for agent_id in AGENT_IDS:
             # Providers receive isolated copies; core retains ownership of transitions.
             state_view = deepcopy(before)
             parameter_view = deepcopy(checked)
+            request_payload = {
+                "agent_id": agent_id,
+                "year": year,
+                "seed": seed,
+                "state": state_view,
+                "parameters": parameter_view,
+            }
+            request_hash = sha256_json(request_payload)
             try:
                 proposal = _propose_with_deadline(
                     active_provider,
@@ -248,12 +268,21 @@ def run_adaptive_simulation(
                     state=state_view,
                     parameters=parameter_view,
                 )
-                proposals.append(
-                    validate_proposal(
+                validated = validate_proposal(
                         proposal,
                         expected_agent_id=agent_id,
                         provenance_type=provenance_type,
                     )
+                proposals.append(validated)
+                provider_audit.append(
+                    {
+                        **provider_identity,
+                        "agent_id": agent_id,
+                        "request_hash": request_hash,
+                        "response_hash": sha256_json(proposal),
+                        "validation_state": "accepted_for_run",
+                        "fallback_used": False,
+                    }
                 )
             except _PROVIDER_FALLBACK_ERRORS as error:
                 fallback = local_provider.propose(
@@ -277,6 +306,17 @@ def run_adaptive_simulation(
                         "fallback": "deterministic_local_v1",
                     }
                 )
+                provider_audit.append(
+                    {
+                        **provider_identity,
+                        "agent_id": agent_id,
+                        "request_hash": request_hash,
+                        "response_hash": None,
+                        "validation_state": "fallback_after_provider_error",
+                        "fallback_used": True,
+                        "fallback_provider_id": local_provider.provider_id,
+                    }
+                )
         resources = _available_resources(checked)
         accepted, used = _arbitrate(proposals, resources)
         axes, transition_saturations = _apply_actions(axes, accepted)
@@ -287,12 +327,14 @@ def run_adaptive_simulation(
             "resources_used": used, "after": deepcopy(axes), "chain_id": "cognition-organization-space-feedback-v1",
             "uncertainty_events": uncertainty_events, "transition_saturations": transition_saturations,
             "provider_errors": provider_errors,
+            "provider_audit": provider_audit,
         }
         rounds.append(item)
         append_trace(trace, item)
     result = {
         "model_version": "adaptive-local-v2", "seed": seed, "parameters": checked,
         "three_phase_chain": list(THREE_PHASE_CHAIN), "rounds": rounds, "final_axes": axes, "trace": trace,
+        "provider_manifest": provider_identity,
     }
     result["canonical_output_hash"] = sha256_json(result)
     return result

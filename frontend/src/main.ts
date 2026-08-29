@@ -80,7 +80,7 @@ function render(result:SimulationResult,round=selectedRound){
  view.proposals.forEach(p=>{
   const row=el('div',`proposal ${p.accepted?'yes':'no'}`),title=el('span','',`${p.accepted?'✓':'×'} ${p.title}`),score=el('b','',`${p.score>0?'+':''}${p.score}`);
   title.title=`提案主体: ${p.agent}`;
-  row.append(title,score);
+  row.append(title,score,el('small','proposal-rationale',p.rationale));
   proposals.append(row);
  });
  const axes=clear('#axes');

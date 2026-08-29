@@ -61,3 +61,15 @@ def test_comparison_rejects_non_shared_seed():
 
     with pytest.raises(ValueError, match="share seed"):
         compare_simulations(fixtures)
+
+
+def test_comparison_rejects_forged_branch_rule_and_deltas():
+    fixtures = {
+        branch: __import__("json").loads(path.read_text(encoding="utf-8"))
+        for branch, path in FIXTURES.items()
+    }
+    fixtures["international_integration"]["rounds"][0]["rule_id"] = "R-FORGED"
+    fixtures["international_integration"]["rounds"][0]["axis_deltas"]["rule_shaping"] = 99
+
+    with pytest.raises(ValueError, match="canonical branch transition rule"):
+        compare_simulations(fixtures)

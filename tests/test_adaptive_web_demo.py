@@ -132,3 +132,17 @@ def test_adaptive_ui_exposes_replay_hash_and_full_pdca_round_labels():
     assert "Plan→Do→Check→Act" in source
     assert "年ごと完全PDCA" in source
     assert "['計画 (Plan)','実行 (Do)','評価 (Check)','改善 (Act)']" not in source
+
+
+def test_adaptive_view_projects_and_renders_proposal_rationale():
+    result = build_adaptive_demo(expand_preset("balanced"), seed=10)
+    assert all(
+        proposal["rationale"]
+        for view in result["rounds"]
+        for proposal in view["proposals"]
+    )
+    source = (web_demo.REPO_ROOT / "frontend/src/main.ts").read_text(encoding="utf-8")
+    types = (web_demo.REPO_ROOT / "frontend/src/types.ts").read_text(encoding="utf-8")
+    assert "proposal-rationale" in source
+    assert "p.rationale" in source
+    assert "rationale:string" in types

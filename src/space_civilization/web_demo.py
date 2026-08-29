@@ -46,7 +46,9 @@ def build_demo_result() -> dict[str, Any]:
             fixtures[branch]["rounds"][0]["axis_deltas"]
         )
         fixtures[branch]["rounds"][0]["action"] = proposal.action
-        fixtures[branch]["rounds"][0]["rule_id"] = PHASE1_TRANSITION_RULES[proposal.action]["rule_id"]
+        fixtures[branch]["rounds"][0]["rule_id"] = (
+            f"R-ADAPT-{branch}-{fixtures[branch]['rounds'][0]['year']}"
+        )
         fixtures[branch]["rounds"][0]["axis_deltas"] = replace_action_effect(
             previous_action, proposal.action, fixtures[branch]["rounds"][0]["axis_deltas"]
         )
@@ -115,6 +117,7 @@ def _proposal_rows(round_item: dict[str, Any]) -> list[dict[str, Any]]:
             "accepted": item["agent_id"] in accepted,
             "score": 1 if item["agent_id"] in accepted else 0,
             "domain": ACTION_DOMAIN[item["action_id"]],
+            "rationale": item["rationale"],
         }
         for item in round_item["proposals"]
     ]

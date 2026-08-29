@@ -1,5 +1,5 @@
 export type Axis={id?:string;label:string;value:number;color:string};
-export type Proposal={agent:string;title:string;score:number;accepted:boolean;action_id?:string;domain?:string};
+export type Proposal={agent:string;title:string;score:number;accepted:boolean;action_id?:string;domain?:string;rationale:string};
 export type RoundView={round:number;year:number;axes:Axis[];proposals:Proposal[];trace:string[];accepted_actions?:string[];domains?:string[]};
 export type SimulationResult={
  round:number;
