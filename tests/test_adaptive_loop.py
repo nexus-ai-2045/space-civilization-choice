@@ -1,3 +1,5 @@
+import urllib.error
+
 from space_civilization.adaptive_loop import run_adaptive_simulation
 from space_civilization.parameter_registry import expand_preset
 from space_civilization.providers import DeterministicProposalProvider
@@ -11,6 +13,45 @@ class InvalidProvider:
 class TimeoutProvider:
     def propose(self, **kwargs):
         raise TimeoutError("provider deadline exceeded")
+
+
+class ConnectionFailProvider:
+    def propose(self, **kwargs):
+        raise ConnectionError("provider unreachable")
+
+
+class UrlErrorProvider:
+    def propose(self, **kwargs):
+        raise urllib.error.URLError("name or service not known")
+
+
+class MutatingProvider:
+    provider_id = "external_mutator_v1"
+    provenance_type = "llm"
+
+    def propose(self, **kwargs):
+        kwargs["parameters"]["supply_disruption"] = 99
+        kwargs["state"]["public_legitimacy"] = -50
+        return {
+            "agent_id": kwargs["agent_id"],
+            "action_id": "train_people",
+            "priority": 0,
+            "rationale": "mutates caller inputs",
+            "provenance_type": "deterministic_core",
+        }
+
+
+class SpoofedProvenanceProvider:
+    provider_id = "external_spoof_v1"
+
+    def propose(self, **kwargs):
+        return {
+            "agent_id": kwargs["agent_id"],
+            "action_id": "train_people",
+            "priority": 0,
+            "rationale": "claims local provenance",
+            "provenance_type": "deterministic_core",
+        }
 
 
 def test_five_agents_repeat_pdca_for_four_rounds():
@@ -81,6 +122,38 @@ def test_provider_timeout_falls_back_and_all_rounds_complete():
     assert len(result["rounds"]) == 4
     assert all(len(item["provider_errors"]) == 5 for item in result["rounds"])
     assert {error["error"] for item in result["rounds"] for error in item["provider_errors"]} == {"TimeoutError"}
+
+
+def test_provider_connection_loss_falls_back_and_all_rounds_complete():
+    for provider, error_name in (
+        (ConnectionFailProvider(), "ConnectionError"),
+        (UrlErrorProvider(), "URLError"),
+    ):
+        result = run_adaptive_simulation(expand_preset("balanced"), seed=6, provider=provider)
+        assert len(result["rounds"]) == 4
+        assert all(len(item["provider_errors"]) == 5 for item in result["rounds"])
+        assert {error["error"] for item in result["rounds"] for error in item["provider_errors"]} == {error_name}
+        assert all(
+            proposal["provenance_type"] == "deterministic_core"
+            for item in result["rounds"]
+            for proposal in item["proposals"]
+        )
+
+
+def test_provider_cannot_mutate_core_owned_state_or_parameters():
+    params = expand_preset("balanced")
+    baseline = params["supply_disruption"]
+    result = run_adaptive_simulation(params, seed=11, provider=MutatingProvider())
+    assert params["supply_disruption"] == baseline
+    assert result["parameters"]["supply_disruption"] == baseline
+    assert all(item["before"]["public_legitimacy"] >= 0 for item in result["rounds"])
+    assert all(proposal["provenance_type"] == "llm" for item in result["rounds"] for proposal in item["proposals"])
+
+
+def test_provenance_is_derived_from_provider_identity_not_payload():
+    result = run_adaptive_simulation(expand_preset("balanced"), seed=11, provider=SpoofedProvenanceProvider())
+    assert all(proposal["provenance_type"] == "llm" for item in result["rounds"] for proposal in item["proposals"])
+    assert all(not item["provider_errors"] for item in result["rounds"])
 
 
 def test_every_parameter_changes_model_state_or_uncertainty_trace():

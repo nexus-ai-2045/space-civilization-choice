@@ -11,8 +11,8 @@ from typing import Any
 from .ai_advisor import propose_action
 from .adaptive_loop import run_adaptive_simulation
 from .comparison import BRANCHES, compare_simulations
-from .parameter_registry import ParameterError, expand_preset
-from .simulation import apply_action_effect, load_fixture, sha256_json
+from .parameter_registry import ParameterError, expand_preset, validate_parameters
+from .simulation import load_fixture, replace_action_effect, sha256_json
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -36,9 +36,10 @@ def build_demo_result() -> dict[str, Any]:
             "exogenous_event": fixtures[branch]["rounds"][0]["exogenous_event"],
         }
         proposal = propose_action(context)
+        previous_action = fixtures[branch]["rounds"][0]["action"]
         fixtures[branch]["rounds"][0]["action"] = proposal.action
-        fixtures[branch]["rounds"][0]["axis_deltas"] = apply_action_effect(
-            proposal.action, fixtures[branch]["rounds"][0]["axis_deltas"]
+        fixtures[branch]["rounds"][0]["axis_deltas"] = replace_action_effect(
+            previous_action, proposal.action, fixtures[branch]["rounds"][0]["axis_deltas"]
         )
         proposals[branch] = {
             **proposal.to_dict(),
@@ -75,47 +76,94 @@ ACTION_PRESENTATION = {
     "open_interfaces": "接続仕様を開放",
 }
 
+# Map accepted adaptive actions onto the three constellation domains for UI path highlight.
+ACTION_DOMAIN = {
+    "fund_transport": "physical",
+    "deploy_autonomy": "physical",
+    "harden_life_support": "physical",
+    "build_energy_capacity": "physical",
+    "localize_supply": "economic",
+    "train_people": "cognitive",
+    "negotiate_standards": "economic",
+    "open_interfaces": "economic",
+}
 
-def build_adaptive_demo(parameters: dict[str, int] | None = None, *, seed: int = 20260829) -> dict[str, Any]:
-    result = run_adaptive_simulation(expand_preset("balanced") if parameters is None else parameters, seed=seed)
-    last = result["rounds"][-1]
-    accepted = {item["agent_id"] for item in last["accepted_actions"]}
-    proposal_rows = [
+
+def _axes_rows(axes: dict[str, int]) -> list[dict[str, Any]]:
+    return [
+        {"id": axis, "label": AXIS_PRESENTATION[axis][0], "value": value, "color": AXIS_PRESENTATION[axis][1]}
+        for axis, value in axes.items()
+    ]
+
+
+def _proposal_rows(round_item: dict[str, Any]) -> list[dict[str, Any]]:
+    accepted = {item["agent_id"] for item in round_item["accepted_actions"]}
+    return [
         {
             "agent": item["agent_id"],
             "title": ACTION_PRESENTATION[item["action_id"]],
+            "action_id": item["action_id"],
             "accepted": item["agent_id"] in accepted,
             "score": 1 if item["agent_id"] in accepted else 0,
+            "domain": ACTION_DOMAIN[item["action_id"]],
         }
-        for item in last["proposals"]
+        for item in round_item["proposals"]
     ]
-    trace_rows = []
-    for round_item in result["rounds"]:
-        accepted_ids = ", ".join(item["action_id"] for item in round_item["accepted_actions"]) or "採択なし"
-        trace_rows.append(f'{round_item["year"]}: {accepted_ids}')
-        trace_rows.extend(
-            f'{round_item["year"]}: {event["rule_id"]} {event["axis"]} {event["delta"]:+d}'
-            for event in round_item["uncertainty_events"]
-        )
+
+
+def _trace_rows(round_item: dict[str, Any]) -> list[str]:
+    accepted_ids = ", ".join(item["action_id"] for item in round_item["accepted_actions"]) or "採択なし"
+    rows = [f'{round_item["year"]}: {accepted_ids}']
+    rows.extend(
+        f'{round_item["year"]}: {event["rule_id"]} {event["axis"]} {event["delta"]:+d}'
+        for event in round_item["uncertainty_events"]
+    )
+    return rows
+
+
+def _round_view(round_item: dict[str, Any], round_index: int) -> dict[str, Any]:
+    return {
+        "round": round_index,
+        "year": round_item["year"],
+        "proposals": _proposal_rows(round_item),
+        "axes": _axes_rows(round_item["after"]),
+        "trace": _trace_rows(round_item),
+        "accepted_actions": [item["action_id"] for item in round_item["accepted_actions"]],
+        "domains": sorted(
+            {
+                ACTION_DOMAIN[item["action_id"]]
+                for item in round_item["accepted_actions"]
+            }
+        ),
+    }
+
+
+def build_adaptive_demo(parameters: dict[str, int] | None = None, *, seed: int = 20260829) -> dict[str, Any]:
+    result = run_adaptive_simulation(expand_preset("balanced") if parameters is None else parameters, seed=seed)
+    round_views = [_round_view(item, index) for index, item in enumerate(result["rounds"], start=1)]
+    last = round_views[-1]
     return {
         "schema": "space_civilization_web_demo.v2",
-        "round": 4,
-        "year": 2040,
+        "round": last["round"],
+        "year": last["year"],
         "decision_engine": "deterministic_local_v1",
-        "axes": [
-            {"id": axis, "label": AXIS_PRESENTATION[axis][0], "value": value, "color": AXIS_PRESENTATION[axis][1]}
-            for axis, value in result["final_axes"].items()
-        ],
-        "proposals": proposal_rows,
-        "trace": trace_rows,
+        "axes": last["axes"],
+        "proposals": last["proposals"],
+        "trace": [row for item in round_views for row in item["trace"]],
+        "rounds": round_views,
         "canonical_output_hash": result["canonical_output_hash"],
         "simulation": result,
     }
 
 
+def adaptive_frontend_available() -> bool:
+    return (FRONTEND_ROOT / "index.html").is_file()
+
+
 class DemoHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        static_root = FRONTEND_ROOT if (FRONTEND_ROOT / "index.html").is_file() else WEB_ROOT
+        self._adaptive_ui = adaptive_frontend_available()
+        static_root = FRONTEND_ROOT if self._adaptive_ui else WEB_ROOT
         super().__init__(*args, directory=str(static_root), **kwargs)
 
     def do_POST(self) -> None:  # noqa: N802
@@ -138,7 +186,16 @@ class DemoHandler(SimpleHTTPRequestHandler):
             parameters = request_body.get("parameters")
             if parameters is not None and not isinstance(parameters, dict):
                 raise ParameterError("parameters must be an object")
-            payload = json.dumps(build_adaptive_demo(parameters, seed=seed), ensure_ascii=False).encode("utf-8")
+            # Fallback UI (web/app.js) expects branch_order / branches / ai_mode.
+            # Explicit parameter objects are still validated fail-closed even on the
+            # legacy route; omission (None) keeps the zero-config fallback demo.
+            if self._adaptive_ui:
+                body = build_adaptive_demo(parameters, seed=seed)
+            else:
+                if parameters is not None:
+                    validate_parameters(parameters)
+                body = build_demo_result()
+            payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(payload)))

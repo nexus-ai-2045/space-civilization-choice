@@ -2,14 +2,31 @@
 
 from __future__ import annotations
 
+import urllib.error
 from copy import deepcopy
 
 from .action_catalog import get_action
 from .agents import AGENT_IDS
 from .parameter_registry import validate_parameters
-from .providers import DeterministicProposalProvider, ProposalProvider, validate_proposal
-from .simulation import AXES, ROUNDS, sha256_json
+from .providers import (
+    DeterministicProposalProvider,
+    ProposalProvider,
+    derive_provenance_type,
+    validate_proposal,
+)
+from .simulation import ROUNDS, sha256_json
 from .trace_v2 import append_trace
+
+# Fail-closed local fallback: connectivity and schema failures must not abort the run.
+_PROVIDER_FALLBACK_ERRORS = (
+    KeyError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    ConnectionError,
+    OSError,
+    urllib.error.URLError,
+)
 
 THREE_PHASE_CHAIN = ("cognitive_cultural", "economic_organizational", "physical_material", "cognitive_cultural")
 
@@ -101,6 +118,9 @@ def run_adaptive_simulation(parameters: dict[str, int], *, seed: int, provider: 
         raise ValueError("seed must be a strict integer")
     checked = validate_parameters(parameters)
     active_provider = provider or DeterministicProposalProvider()
+    provenance_type = derive_provenance_type(active_provider)
+    local_provider = DeterministicProposalProvider()
+    local_provenance = derive_provenance_type(local_provider)
     axes = _initial_axes(checked)
     trace: list[dict] = []
     rounds = []
@@ -109,15 +129,46 @@ def run_adaptive_simulation(parameters: dict[str, int], *, seed: int, provider: 
         proposals = []
         provider_errors = []
         for agent_id in AGENT_IDS:
+            # Providers receive isolated copies; core retains ownership of transitions.
+            state_view = deepcopy(before)
+            parameter_view = deepcopy(checked)
             try:
-                proposal = active_provider.propose(agent_id=agent_id, year=year, seed=seed, state=before, parameters=checked)
-                proposals.append(validate_proposal(proposal, expected_agent_id=agent_id))
-            except (KeyError, TimeoutError, TypeError, ValueError) as error:
-                fallback = DeterministicProposalProvider().propose(
-                    agent_id=agent_id, year=year, seed=seed, state=before, parameters=checked
+                proposal = active_provider.propose(
+                    agent_id=agent_id,
+                    year=year,
+                    seed=seed,
+                    state=state_view,
+                    parameters=parameter_view,
                 )
-                proposals.append(validate_proposal(fallback, expected_agent_id=agent_id))
-                provider_errors.append({"agent_id": agent_id, "error": type(error).__name__, "fallback": "deterministic_local_v1"})
+                proposals.append(
+                    validate_proposal(
+                        proposal,
+                        expected_agent_id=agent_id,
+                        provenance_type=provenance_type,
+                    )
+                )
+            except _PROVIDER_FALLBACK_ERRORS as error:
+                fallback = local_provider.propose(
+                    agent_id=agent_id,
+                    year=year,
+                    seed=seed,
+                    state=deepcopy(before),
+                    parameters=deepcopy(checked),
+                )
+                proposals.append(
+                    validate_proposal(
+                        fallback,
+                        expected_agent_id=agent_id,
+                        provenance_type=local_provenance,
+                    )
+                )
+                provider_errors.append(
+                    {
+                        "agent_id": agent_id,
+                        "error": type(error).__name__,
+                        "fallback": "deterministic_local_v1",
+                    }
+                )
         resources = _available_resources(checked)
         accepted, used = _arbitrate(proposals, resources)
         axes, transition_saturations = _apply_actions(axes, accepted)

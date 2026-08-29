@@ -1,6 +1,6 @@
 from space_civilization.ai_advisor import ActionProposal
 from space_civilization import web_demo
-from space_civilization.simulation import AXES, SimulationError, apply_action_effect
+from space_civilization.simulation import ACTION_EFFECTS, AXES, SimulationError, apply_action_effect, replace_action_effect
 from space_civilization.web_demo import build_demo_result
 
 
@@ -36,6 +36,25 @@ def test_ai_action_changes_the_simulated_state(monkeypatch):
     supply = build_demo_result()
 
     assert training["final_axis_comparison"] != supply["final_axis_comparison"]
+
+
+def test_replacing_fixture_action_removes_prior_action_effect():
+    base = {axis: 0 for axis in AXES}
+    base["industrial_reproduction"] = 8
+    base["relationship_choice"] = -3
+    previous = "allocate_to_domestic_core_components"
+    nxt = "expand_maintainer_training"
+
+    replaced = replace_action_effect(previous, nxt, base)
+    expected = dict(base)
+    for axis, delta in ACTION_EFFECTS[previous].items():
+        expected[axis] -= delta
+    for axis, delta in ACTION_EFFECTS[nxt].items():
+        expected[axis] += delta
+    assert replaced == expected
+    # Additive apply would leave the original industrial bump intact.
+    additive = apply_action_effect(nxt, base)
+    assert additive["industrial_reproduction"] != replaced["industrial_reproduction"]
 
 
 def test_ui_does_not_render_ai_text_as_html():

@@ -135,6 +135,24 @@ def apply_action_effect(action: str, base_deltas: dict[str, int]) -> dict[str, i
     return effective
 
 
+def remove_action_effect(action: str, base_deltas: dict[str, int]) -> dict[str, int]:
+    """fixtureに埋め込まれた元action寄与を取り除く。"""
+    if action not in PHASE1_ALLOWED_ACTIONS or action not in ACTION_EFFECTS:
+        raise SimulationError("action has no canonical effect rule")
+    if set(base_deltas) != set(AXES) or any(not _is_int(value) for value in base_deltas.values()):
+        raise SimulationError("base deltas must contain six integer axes")
+    effective = deepcopy(base_deltas)
+    for axis, delta in ACTION_EFFECTS[action].items():
+        effective[axis] -= delta
+    return effective
+
+
+def replace_action_effect(previous_action: str, next_action: str, base_deltas: dict[str, int]) -> dict[str, int]:
+    """元action寄与を除いてから代替action寄与を適用する。"""
+    without_previous = remove_action_effect(previous_action, base_deltas)
+    return apply_action_effect(next_action, without_previous)
+
+
 def _deterministic_draw(seed: int, year: int, exogenous_event: str) -> float:
     """seedとround入力から、環境非依存の[0, 1) drawを生成する。"""
     material = canonical_json({"seed": seed, "year": year, "exogenous_event": exogenous_event})

@@ -42,9 +42,12 @@ parameter registry
 
 ## External provider boundary
 
-外部providerには`ProposalProvider`境界を設ける。timeout、schema不正、allowlist外、size超過時は
-同一入力のローカルproviderへfallbackする。provider ID、model ID、provider version、request hash、
-response hash、validation state、fallback reasonをmanifestへ残す。secretや未除去の原文は保存しない。
+外部providerには`ProposalProvider`境界を設ける。timeout、接続失敗（ConnectionError / URLError）、
+schema不正、allowlist外、size超過時は同一入力のローカルproviderへfallbackする。
+`provenance_type`はprovider応答ではなく、設定されたprovider identityからコアが割り当てる。
+providerへ渡すstate / parametersは防御的コピーとし、遷移に使うオブジェクトはコアが保持する。
+provider ID、model ID、provider version、request hash、response hash、validation state、
+fallback reasonをmanifestへ残す。secretや未除去の原文は保存しない。
 
 Google Cloudのproject作成、IAM、Secret Manager、Cloud Run、GPU、課金、deployは別の外部操作であり、
 このADRは実行許可を与えない。ローカルcontractがgreenになった後、専用deployment ADRと人間承認を要する。
