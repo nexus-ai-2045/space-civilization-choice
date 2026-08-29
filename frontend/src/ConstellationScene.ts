@@ -16,7 +16,7 @@ export class ConstellationScene extends Phaser.Scene{
   };
   this.draw();
  }
- private draw(){this.children.removeAll();const w=this.scale.width,h=this.scale.height,cx=w/2,cy=h*.5;const r=Math.min(w,h)*.19;
+ private draw(){this.tweens.killAll();this.children.removeAll(true);const w=this.scale.width,h=this.scale.height,cx=w/2,cy=h*.5;const r=Math.min(w,h)*.19;
   this.add.rectangle(cx,cy,w,h,0x06111e,0);
   const stars=this.add.graphics();for(let i=0;i<70;i++){const x=(i*83)%w,y=(i*47)%h;stars.fillStyle(i%7?0x174c74:0x42baff,i%7?.25:.8).fillCircle(x,y,i%9?1:1.7)}
   this.zones=[
