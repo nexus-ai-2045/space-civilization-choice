@@ -119,6 +119,7 @@ def validate_fixture(data: dict[str, Any]) -> None:
             not isinstance(evidence_ref, str)
             or not evidence_ref.strip()
             or not evidence_ref.startswith("model-assumption:")
+            or not evidence_ref.removeprefix("model-assumption:").strip()
         ):
             raise SimulationError(f"round {index} evidence_ref must be a model-assumption string")
         if not item.get("action") or not item.get("rule_id"):

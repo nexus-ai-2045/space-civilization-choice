@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
-import os
 import subprocess
 import tempfile
 import unittest
@@ -498,6 +497,65 @@ class ProjectGoalContractTest(unittest.TestCase):
         self.assertIn(
             "stored_run_artifacts_invalid",
             {item.get("reason") for item in report["findings"]},
+        )
+
+    def test_replay_malformed_fixture_shapes_return_structured_findings(self) -> None:
+        malformed_values = (
+            [],
+            {"rounds": None},
+            {"rounds": {}},
+            {"rounds": [True]},
+            {"seed": False, "rounds": []},
+            {"seed": 1, "rounds": [{"year": 1e400}]},
+        )
+        for malformed in malformed_values:
+            with self.subTest(malformed=malformed), tempfile.TemporaryDirectory() as directory:
+                repo = Path(directory)
+                self._prepare_replay_evidence(repo)
+                fixture = repo / "fixtures/phase1_domestic_autonomy.json"
+                fixture.write_text(json.dumps(malformed), encoding="utf-8")
+                receipt = repo / "evidence/done-when/REPLAY-001.json"
+                payload = json.loads(receipt.read_text(encoding="utf-8"))
+                payload["artifact_sha256"]["fixture"] = hashlib.sha256(
+                    _canonical_text_bytes(fixture)
+                ).hexdigest()
+                receipt.write_text(json.dumps(payload), encoding="utf-8")
+
+                report = MODULE.build_report(repo)
+
+                self.assertFalse(report["contract_valid"])
+                self.assertIn(
+                    "stored_run_artifacts_invalid",
+                    {item.get("reason") for item in report["findings"]},
+                )
+
+    def test_replay_oversized_json_integers_return_structured_findings(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            stored, event_log, receipt = self._prepare_replay_evidence(repo)
+            huge_integer = "9" * 5000
+            for path in (stored, event_log):
+                text = path.read_text(encoding="utf-8")
+                self.assertIn("0.8060476863891415", text)
+                path.write_text(
+                    text.replace("0.8060476863891415", huge_integer, 1),
+                    encoding="utf-8",
+                )
+            payload = json.loads(receipt.read_text(encoding="utf-8"))
+            payload["artifact_sha256"]["canonical_manifest"] = hashlib.sha256(
+                _canonical_text_bytes(stored)
+            ).hexdigest()
+            payload["artifact_sha256"]["event_log"] = hashlib.sha256(
+                _canonical_text_bytes(event_log)
+            ).hexdigest()
+            receipt.write_text(json.dumps(payload), encoding="utf-8")
+
+            report = MODULE.build_report(repo)
+
+        self.assertFalse(report["contract_valid"])
+        self.assertTrue(
+            {"artifact_invalid_json", "event_log_invalid_jsonl"}
+            & {item.get("reason") for item in report["findings"]}
         )
 
     def test_replay_rejects_discontinuous_events_and_final_state_mismatch(self) -> None:
@@ -1196,62 +1254,37 @@ class ProjectGoalContractTest(unittest.TestCase):
             {item.get("reason") for item in report["findings"]},
         )
 
-    def test_ci_live_readback_bootstraps_in_progress_goal_contract_jobs(
-        self,
-    ) -> None:
-        inspected_head = "a" * 40
-        original = MODULE._github_json
+    def test_ci_post_verifier_rejects_first_run_or_in_progress_checks(self) -> None:
+        head = "a" * 40
+        for jobs in ({}, {**{job: "success" for job in MODULE.REQUIRED_CI_JOBS}, "goal-contract (windows-latest)": None}):
+            with self.subTest(jobs=jobs):
+                report = MODULE.build_ci_exact_head_report(
+                    ROOT,
+                    head_resolver=lambda _: head,
+                    live_verifier=lambda *_: {
+                        "head_sha": head,
+                        "conclusion": "pending",
+                        "jobs": jobs,
+                    },
+                )
+                self.assertFalse(report["contract_valid"])
+                self.assertIn(
+                    "ci_required_job_not_successful",
+                    {item["code"] for item in report["findings"]},
+                )
 
-        def fake_github(api_path: str):
-            self.assertIn(inspected_head, api_path)
-            return {
-                "check_runs": [
-                    {
-                        "name": "secret-scan",
-                        "conclusion": "success",
-                        "status": "completed",
-                    },
-                    {
-                        "name": "goal-contract (ubuntu-latest)",
-                        "conclusion": None,
-                        "status": "in_progress",
-                    },
-                    {
-                        "name": "goal-contract (windows-latest)",
-                        "conclusion": None,
-                        "status": "queued",
-                    },
-                    {
-                        "name": "ratchet (ubuntu-latest)",
-                        "conclusion": "success",
-                        "status": "completed",
-                    },
-                    {
-                        "name": "ratchet (windows-latest)",
-                        "conclusion": "success",
-                        "status": "completed",
-                    },
-                ]
-            }
-
-        MODULE._github_json = fake_github  # type: ignore[method-assign]
-        try:
-            os.environ["GITHUB_ACTIONS"] = "true"
-            os.environ["GITHUB_JOB"] = "goal-contract"
-            os.environ["GITHUB_SHA"] = inspected_head
-            live = MODULE._default_live_verifier(
-                "CI-001", {"inspected_head": inspected_head}
-            )
-        finally:
-            MODULE._github_json = original  # type: ignore[method-assign]
-            for key in ("GITHUB_ACTIONS", "GITHUB_JOB", "GITHUB_SHA"):
-                os.environ.pop(key, None)
-
-        self.assertEqual(live["conclusion"], "success")
-        self.assertEqual(
-            live["jobs"]["goal-contract (ubuntu-latest)"],
-            "success",
+    def test_ci_post_verifier_rejects_exact_head_mismatch(self) -> None:
+        report = MODULE.build_ci_exact_head_report(
+            ROOT,
+            head_resolver=lambda _: "a" * 40,
+            live_verifier=lambda *_: {
+                "head_sha": "b" * 40,
+                "conclusion": "success",
+                "jobs": {job: "success" for job in MODULE.REQUIRED_CI_JOBS},
+            },
         )
+        self.assertFalse(report["contract_valid"])
+        self.assertIn("ci_exact_head_mismatch", {item["code"] for item in report["findings"]})
 
     def test_required_ci_jobs_match_workflow_matrix_names(self) -> None:
         self.assertEqual(
@@ -1264,6 +1297,14 @@ class ProjectGoalContractTest(unittest.TestCase):
                 "ratchet (windows-latest)",
             ),
         )
+
+    def test_ci_workflow_uses_independent_post_ci_verifier(self) -> None:
+        workflow = (ROOT / ".github/workflows/ai-ratchet-gate.yml").read_text(encoding="utf-8")
+        self.assertIn("--static-ci", workflow)
+        self.assertIn("ci-exact-head-verifier:", workflow)
+        self.assertIn("needs: [secret-scan, goal-contract, ratchet]", workflow)
+        self.assertIn("--verify-ci-head", workflow)
+        self.assertNotIn(MODULE.CI_EXACT_HEAD_VERIFIER_JOB, MODULE.REQUIRED_CI_JOBS)
 
     def test_public_requires_validated_ci_and_human_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

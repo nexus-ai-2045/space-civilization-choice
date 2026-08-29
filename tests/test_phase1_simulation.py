@@ -223,9 +223,13 @@ def test_fixture_rejects_action_rule_or_base_delta_mismatch():
         run_simulation(data)
 
 
-def test_fixture_rejects_non_string_evidence_ref():
+@pytest.mark.parametrize(
+    "evidence_ref",
+    [42, [], {}, "   ", "model-assumption:   ", "research-evidence:item"],
+)
+def test_fixture_rejects_invalid_model_assumption_evidence_ref(evidence_ref):
     data = load_fixture(FIXTURE)
-    data["rounds"][0]["evidence_ref"] = 42
+    data["rounds"][0]["evidence_ref"] = evidence_ref
 
     with pytest.raises(SimulationError, match="evidence_ref must be a model-assumption string"):
         run_simulation(data)

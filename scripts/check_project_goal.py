@@ -50,6 +50,8 @@ REQUIRED_CI_JOBS = (
     "ratchet (ubuntu-latest)",
     "ratchet (windows-latest)",
 )
+CI_EXACT_HEAD_VERIFIER_JOB = "ci-exact-head-verifier"
+RULESET_REQUIRED_CHECKS = (*REQUIRED_CI_JOBS, CI_EXACT_HEAD_VERIFIER_JOB)
 CANONICAL_TRACE_AXES = frozenset(
     {
         "access_and_operation",
@@ -511,13 +513,17 @@ def _scan_tracked_personal_paths(repo: Path) -> tuple[bool, list[str]]:
 
 
 def _github_json(api_path: str) -> dict[str, Any]:
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "space-civilization-choice-goal-gate",
+    }
+    github_token = os.environ.get("GITHUB_TOKEN")
+    if github_token:
+        headers["Authorization"] = f"Bearer {github_token}"
     request = urllib.request.Request(
         f"https://api.github.com{api_path}",
-        headers={
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "space-civilization-choice-goal-gate",
-        },
+        headers=headers,
     )
     with urllib.request.urlopen(request, timeout=15) as response:
         payload = json.load(response)
@@ -551,26 +557,20 @@ def _default_live_verifier(
                 if not isinstance(name, str):
                     continue
                 conclusion = check.get("conclusion")
-                status = check.get("status")
-                # goal-contract 自身が検査中のとき、同一HEADの未完了goal-contractを
-                # 暫定success扱いし、自己依存の鶏卵を避ける。
-                if (
-                    conclusion is None
-                    and status in {"queued", "in_progress"}
-                    and name.startswith("goal-contract")
-                    and os.environ.get("GITHUB_ACTIONS") == "true"
-                    and os.environ.get("GITHUB_JOB") == "goal-contract"
-                    and os.environ.get("GITHUB_SHA", "").lower() == inspected_head
-                ):
-                    conclusion = "success"
                 # 同名checkが複数ある場合はsuccessを優先して残す。
                 if name not in jobs or conclusion == "success":
                     jobs[name] = conclusion
         all_required_ok = all(jobs.get(job) == "success" for job in REQUIRED_CI_JOBS)
+        terminal_failure = any(
+            conclusion in {"failure", "cancelled", "timed_out", "action_required"}
+            for conclusion in jobs.values()
+        )
         return {
             "repository": CANONICAL_REPOSITORY,
             "head_sha": inspected_head,
-            "conclusion": "success" if all_required_ok else "failure",
+            "conclusion": (
+                "success" if all_required_ok else "failure" if terminal_failure else "pending"
+            ),
             "jobs": jobs,
         }
     if goal_id == "PUBLIC-001":
@@ -608,7 +608,7 @@ def _read_json_evidence(
 ) -> Any | None:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError):
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
         _evidence_error(
             findings,
             goal_id,
@@ -673,6 +673,7 @@ def _validate_done_when_artifact_contents(
     live_verifier: LiveVerifier,
     head_resolver: HeadResolver,
     personal_path_scanner: PersonalPathScanner,
+    verify_ci_live: bool,
 ) -> None:
     """11個のdone_whenごとに、自己申告ではない最小証拠構造を検証する。"""
     if goal_id == "GOAL-001":
@@ -741,7 +742,7 @@ def _validate_done_when_artifact_contents(
                 for line in paths["event_log"].read_text(encoding="utf-8").splitlines()
                 if line.strip()
             ]
-        except (OSError, UnicodeError, json.JSONDecodeError):
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
             _evidence_error(findings, goal_id, "event_log_invalid_jsonl")
             return
         receipt_result = receipt.get("result")
@@ -753,11 +754,19 @@ def _validate_done_when_artifact_contents(
         stored_valid = isinstance(stored, dict)
         stored_valid = stored_valid and stored.get("schema") == "space_civilization_stored_run.v1"
         stored_valid = stored_valid and stored.get("event_count") == len(events) and len(events) > 0
-        stored_valid = stored_valid and stored.get("event_log_hash") == _sha256_json(events)
         canonical_result = stored.get("canonical_result") if isinstance(stored, dict) else None
-        computed_output_hash = (
-            _sha256_json(canonical_result) if isinstance(canonical_result, dict) else None
-        )
+        try:
+            computed_event_hash = _sha256_json(events)
+            computed_output_hash = (
+                _sha256_json(canonical_result)
+                if isinstance(canonical_result, dict)
+                else None
+            )
+        except (TypeError, ValueError, OverflowError):
+            computed_event_hash = None
+            computed_output_hash = None
+            stored_valid = False
+        stored_valid = stored_valid and stored.get("event_log_hash") == computed_event_hash
         # copied digest同士の一致ではなく、永続化された完全resultから再計算する。
         stored_valid = stored_valid and computed_output_hash == replay_output
         stored_valid = stored_valid and stored.get("canonical_output_hash") == computed_output_hash
@@ -765,7 +774,7 @@ def _validate_done_when_artifact_contents(
         persisted_manifest: dict[str, Any] | None = None
         if isinstance(canonical_result, dict):
             stored_valid = stored_valid and canonical_result.get("events") == events
-            stored_valid = stored_valid and canonical_result.get("event_log_hash") == _sha256_json(events)
+            stored_valid = stored_valid and canonical_result.get("event_log_hash") == computed_event_hash
             maybe_manifest = canonical_result.get("manifest")
             # replay署名は永続化されたresult.manifestへ束縛する。
             stored_valid = stored_valid and isinstance(maybe_manifest, dict)
@@ -794,6 +803,7 @@ def _validate_done_when_artifact_contents(
                 ValueError,
                 TypeError,
                 AttributeError,
+                OverflowError,
                 ImportError,
                 ModuleNotFoundError,
             ):
@@ -860,7 +870,14 @@ def _validate_done_when_artifact_contents(
                     expected_effect = simulation.realize_exogenous_effect(
                         input_event, expected_draw
                     )
-                except (ValueError, KeyError, ImportError, ModuleNotFoundError):
+                except (
+                    ValueError,
+                    TypeError,
+                    OverflowError,
+                    KeyError,
+                    ImportError,
+                    ModuleNotFoundError,
+                ):
                     stored_valid = False
                     break
                 if (
@@ -958,7 +975,7 @@ def _validate_done_when_artifact_contents(
                         for line in log_path.read_text(encoding="utf-8").splitlines()
                         if line.strip()
                     ]
-                except (OSError, UnicodeError, json.JSONDecodeError):
+                except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
                     valid = False
                     break
                 if not events or _sha256_json(events) != event_log_hash:
@@ -991,7 +1008,7 @@ def _validate_done_when_artifact_contents(
                     for line in trace_path.read_text(encoding="utf-8").splitlines()
                     if line.strip()
                 ]
-            except (OSError, UnicodeError, json.JSONDecodeError):
+            except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
                 records = None
         else:
             payload = _read_json_evidence(trace_path, goal_id, "trace", findings)
@@ -1002,7 +1019,7 @@ def _validate_done_when_artifact_contents(
                 for line in paths["event_log"].read_text(encoding="utf-8").splitlines()
                 if line.strip()
             ]
-        except (OSError, UnicodeError, json.JSONDecodeError):
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
             _evidence_error(findings, goal_id, "event_log_invalid_jsonl")
             return
         receipt_result = receipt.get("result")
@@ -1259,6 +1276,8 @@ def _validate_done_when_artifact_contents(
         if not workflow_valid or not receipt_struct_valid:
             _evidence_error(findings, goal_id, "ci_result_invalid")
             return
+        if not verify_ci_live:
+            return
         try:
             live = live_verifier(
                 goal_id,
@@ -1350,6 +1369,7 @@ def _validate_done_when_evidence(
     live_verifier: LiveVerifier,
     head_resolver: HeadResolver,
     personal_path_scanner: PersonalPathScanner,
+    verify_ci_live: bool,
 ) -> None:
     """done_when固有の正本receiptと、その型付き一次証拠を検証する。"""
     contract = DONE_WHEN_EVIDENCE_CONTRACTS.get(goal_id)
@@ -1379,7 +1399,7 @@ def _validate_done_when_evidence(
 
     try:
         receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError):
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
         _evidence_error(
             findings,
             goal_id,
@@ -1482,6 +1502,7 @@ def _validate_done_when_evidence(
             live_verifier,
             head_resolver,
             personal_path_scanner,
+            verify_ci_live,
         )
 
 
@@ -1559,6 +1580,7 @@ def build_report(
     live_verifier: LiveVerifier | None = None,
     head_resolver: HeadResolver | None = None,
     personal_path_scanner: PersonalPathScanner | None = None,
+    verify_ci_live: bool = True,
 ) -> dict[str, Any]:
     repo = repo.resolve()
     live_verifier = live_verifier or _default_live_verifier
@@ -1686,6 +1708,7 @@ def build_report(
             live_verifier,
             head_resolver,
             personal_path_scanner,
+            verify_ci_live,
         )
         if len(findings) == finding_count:
             validated_done_when_ids.add(goal_id)
@@ -1931,24 +1954,85 @@ def build_report(
     }
 
 
+def build_ci_exact_head_report(
+    repo: Path,
+    *,
+    live_verifier: LiveVerifier | None = None,
+    head_resolver: HeadResolver | None = None,
+) -> dict[str, Any]:
+    """完了済みCIを外側から検証し、検証job自身への依存を作らない。"""
+    repo = repo.resolve()
+    live_verifier = live_verifier or _default_live_verifier
+    head_resolver = head_resolver or _resolve_git_head
+    findings: list[dict[str, str]] = []
+    try:
+        inspected_head = head_resolver(repo)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        inspected_head = ""
+    if not _is_digest(inspected_head, length=40):
+        _finding(findings, "ci_exact_head_unavailable")
+        live: dict[str, Any] = {}
+    else:
+        try:
+            live = live_verifier("CI-001", {"inspected_head": inspected_head})
+        except (OSError, ValueError, urllib.error.URLError):
+            live = {}
+            _finding(findings, "ci_live_readback_unavailable")
+    if live:
+        live_head = live.get("head_sha")
+        if not isinstance(live_head, str) or live_head.lower() != inspected_head:
+            _finding(findings, "ci_exact_head_mismatch")
+        jobs = live.get("jobs")
+        if not isinstance(jobs, dict):
+            _finding(findings, "ci_jobs_unavailable")
+        else:
+            for job in REQUIRED_CI_JOBS:
+                conclusion = jobs.get(job)
+                if conclusion != "success":
+                    _finding(
+                        findings,
+                        "ci_required_job_not_successful",
+                        job=job,
+                        conclusion=str(conclusion or "pending"),
+                    )
+    valid = not findings
+    return {
+        "schema": "space_civilization_ci_exact_head_check.v1",
+        "contract_valid": valid,
+        "state": "exact_head_ci_verified" if valid else "blocked",
+        "inspected_head": inspected_head,
+        "required_jobs": list(REQUIRED_CI_JOBS),
+        "ruleset_required_checks": list(RULESET_REQUIRED_CHECKS),
+        "findings": findings,
+        "external_actions_performed": False,
+    }
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="project goal contractを検査する。")
     parser.add_argument(
         "--repo", type=Path, default=Path(__file__).resolve().parents[1]
     )
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--static-ci", action="store_true")
+    parser.add_argument("--verify-ci-head", action="store_true")
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    report = build_report(args.repo)
+    report = (
+        build_ci_exact_head_report(args.repo)
+        if args.verify_ci_head
+        else build_report(args.repo, verify_ci_live=not args.static_ci)
+    )
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
     else:
         print(f"state: {report['state']}")
         print(f"contract_valid: {str(report['contract_valid']).lower()}")
-        print(f"product_mvp_complete: {str(report['product_mvp_complete']).lower()}")
+        if "product_mvp_complete" in report:
+            print(f"product_mvp_complete: {str(report['product_mvp_complete']).lower()}")
         for finding in report["findings"]:
             print(f"- {finding}")
     return 0 if report["contract_valid"] else 2
