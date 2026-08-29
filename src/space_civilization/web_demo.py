@@ -12,7 +12,7 @@ from .ai_advisor import propose_action
 from .adaptive_loop import run_adaptive_simulation
 from .comparison import BRANCHES, compare_simulations
 from .parameter_registry import ParameterError, expand_preset, validate_parameters
-from .simulation import load_fixture, replace_action_effect, sha256_json
+from .simulation import PHASE1_TRANSITION_RULES, load_fixture, replace_action_effect, sha256_json
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -26,7 +26,10 @@ FIXTURES = {
 
 
 def build_demo_result() -> dict[str, Any]:
-    fixtures = {branch: deepcopy(load_fixture(path)) for branch, path in FIXTURES.items()}
+    fixtures = {
+        branch: deepcopy(load_fixture(path, allow_hackathon_demo_branches=True))
+        for branch, path in FIXTURES.items()
+    }
     proposals: dict[str, dict[str, str]] = {}
     for branch in BRANCHES:
         context = {
@@ -38,6 +41,7 @@ def build_demo_result() -> dict[str, Any]:
         proposal = propose_action(context)
         previous_action = fixtures[branch]["rounds"][0]["action"]
         fixtures[branch]["rounds"][0]["action"] = proposal.action
+        fixtures[branch]["rounds"][0]["rule_id"] = PHASE1_TRANSITION_RULES[proposal.action]["rule_id"]
         fixtures[branch]["rounds"][0]["axis_deltas"] = replace_action_effect(
             previous_action, proposal.action, fixtures[branch]["rounds"][0]["axis_deltas"]
         )

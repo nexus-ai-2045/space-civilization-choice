@@ -5,15 +5,20 @@
   "status": "passed",
   "artifacts": {
     "test": "tests/test_phase1_simulation.py",
-    "trace": "evidence/runs/phase1-domestic-autonomy-20260828-v2/trace.jsonl"
+    "trace": "evidence/runs/phase1-domestic-autonomy-20260828-v2/trace.jsonl",
+    "source_manifest": "evidence/runs/phase1-domestic-autonomy-20260828-v2/run-manifest.json",
+    "event_log": "evidence/runs/phase1-domestic-autonomy-20260828-v2/events.jsonl"
   },
   "artifact_sha256": {
-    "test": "d892626a753314f536c22f142bec561192d5daa3adf411716bd6a211af6d48eb",
-    "trace": "07e0390cf37ebe81a5ae610887fc60e59cf4743741e3c41c0d61134618c3e4a7"
+    "test": "9df15d0ecd400cb3d7235ee9090cec0f4f3d183b19accd23e79cb63412e28d11",
+    "trace": "c4d47f3b8469e3beb2534ab41cd7c2b9ed151e8748d196e73b9971ff4bf80758",
+    "source_manifest": "f9af93a6a09b575ec630724b018f0a6abe4cdb8eb08c8965a7a3626687c2f164",
+    "event_log": "e1bcedf5defce09a7a8591c29fbdb521c9289a0a950bb2e8ee71f907ab86e39e"
   },
   "result": {
     "record_count": 4,
     "causal_scope": "model_internal",
-    "axis_count": 6
+    "axis_count": 6,
+    "event_log_hash": "3dae2978548543716b8c3bd35044381fe51c92f06f797f53418e08521f3bb130"
   }
 }

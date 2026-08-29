@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from .simulation import AXES, load_fixture, run_simulation, sha256_json
+from .simulation import AXES, load_fixture, run_simulation, sha256_json, validate_fixture
 
 
 BRANCHES = ("international_integration", "domestic_autonomy", "open_platform")
@@ -18,12 +18,18 @@ def compare_simulations(fixtures: Mapping[str, dict[str, Any] | str | Path]) -> 
         raise ValueError(f"fixtures must contain exactly these branches: {list(BRANCHES)}")
 
     loaded = {
-        branch: load_fixture(value) if isinstance(value, (str, Path)) else value
+        branch: (
+            load_fixture(value, allow_hackathon_demo_branches=True)
+            if isinstance(value, (str, Path))
+            else value
+        )
         for branch, value in fixtures.items()
     }
     for branch, fixture in loaded.items():
         if fixture.get("branch") != branch:
             raise ValueError(f"fixture branch mismatch: expected {branch}")
+        # In-memory fixtures (already mutated by the demo) still need demo-branch validation.
+        validate_fixture(fixture, allow_hackathon_demo_branches=True)
 
     reference = loaded[BRANCHES[0]]
     shared_fields = ("scenario_snapshot_id", "model_version", "seed", "initial_state")
@@ -36,7 +42,10 @@ def compare_simulations(fixtures: Mapping[str, dict[str, Any] | str | Path]) -> 
         if branch_events != reference_events:
             raise ValueError("branch fixtures must share the exogenous event stream")
 
-    runs = {branch: run_simulation(loaded[branch]) for branch in BRANCHES}
+    runs = {
+        branch: run_simulation(loaded[branch], allow_hackathon_demo_branches=True)
+        for branch in BRANCHES
+    }
     stream_hashes = {run["manifest"]["exogenous_event_stream_hash"] for run in runs.values()}
     if len(stream_hashes) != 1:
         raise ValueError("branch runs did not realize the same exogenous event stream")

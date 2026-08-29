@@ -15,8 +15,9 @@
 </div>
 
 > [!IMPORTANT]
-> 現在はハッカソン用の**ローカル適応型シミュレーターMVP**です。20パラメータ、5主体、
-> 4ラウンドPDCAと因果トレースをローカル実行できます。政府・JAXA・主催者の公式見解ではありません。
+> 現在はハッカソン用の**ローカル適応型シミュレーターMVP**です。Phase 1の決定論コアに加え、
+> 20パラメータ・5主体・4ラウンドPDCAと因果トレースをローカル実行できます。
+> BRANCH-001の三分岐完成や公開承認は未達で、政府・JAXA・主催者の公式見解ではありません。
 
 ## 目的
 
@@ -110,7 +111,7 @@ flowchart LR
 |---|---|---|
 | **0 公開設計** | ゴール、仕様、ADR、根拠台帳、安全境界 | **main公開済み／運用契約更新はreview待ち** |
 | **1 決定論的fixture** | 状態schema、event log、同一seed replay | **完了条件達成（一分岐replay＋trace）** |
-| **2 適応型比較** | 20入力、5主体、共通外生event、六観測軸 | **ローカルMVP実装／感度分析は残務** |
+| **2 適応型比較** | 20入力、5主体、共通外生event、六観測軸 | **ローカルMVP実装／BRANCH-001・感度分析は残務** |
 | **3 UI** | 因果盤、parameter操作、提案採否、trace | **Causal Constellation実装** |
 | **4 外部provider** | schema検証された行動提案 | **接続境界のみ固定／外部接続なし** |
 | **5 demo評価** | 人間レビュー、説明可能性eval | 未着手 |
@@ -140,8 +141,10 @@ canonical output hash一致と六軸deltaのmodel_internal traceまで実装し�
 ### ローカル検査
 
 ゴール契約、決定論コア、適応型PDCA、ローカルWebデモを検査・実行できます。
+クリーンなcloneでは、CIと同じpinned依存を入れてから検査してください。
 
 ```powershell
+py -3.13 -m pip install --disable-pip-version-check -r requirements-dev.txt
 $env:PYTHONPATH = 'src'
 py -3.13 -m pytest -q
 py -3.13 scripts/check_project_goal.py --json
@@ -157,9 +160,10 @@ $ratchet = Join-Path $env:APPDATA 'Python\Python313\Scripts\ai-ratchet-gate.exe'
 & $ratchet --repo .
 ```
 
-ブラウザで`http://127.0.0.1:8000`を開き、シミュレーションを実行します。外部AIやAPI keyは
-不要で、状態遷移の単一writerはローカル決定論コアです。Google Cloud等は同じprovider contractへ
-後から接続し、提案だけを担当します。このMVPは公開・応募・政策提言の許可を意味しません。
+fixture runnerはmanifest、4件のevent、event log hash、canonical output hash、model_internal
+traceをJSONで返します。ブラウザで`http://127.0.0.1:8000`を開き、適応型シミュレーションも
+実行できます。外部AIやAPI keyは不要で、状態遷移の単一writerはローカル決定論コアです。
+これはBRANCH-001完成、プロダクトMVP完成、公開・応募・政策提言の許可を意味しません。
 
 ## 制約
 
