@@ -113,7 +113,7 @@ flowchart LR
 | **1 決定論的fixture** | 状態schema、event log、同一seed replay | **完了条件達成（一分岐replay＋trace）** |
 | **2 適応型比較** | 20入力、5主体、共通外生event、六観測軸 | **ローカルMVP実装／BRANCH-001・感度分析は残務** |
 | **3 UI** | 因果盤、parameter操作、提案採否、trace | **Causal Constellation実装** |
-| **4 外部provider** | schema検証された行動提案 | **接続境界のみ固定／外部接続なし** |
+| **4 外部provider** | schema検証された行動提案 | **後続JSON/HTTP adapterへ延期／外部接続なし** |
 | **5 demo評価** | 人間レビュー、説明可能性eval | 未着手 |
 
 Phase 1として、国内自立型の1 branch × 4 round fixtureをLLMなしで再生し、同一入力の
@@ -162,7 +162,8 @@ $ratchet = Join-Path $env:APPDATA 'Python\Python313\Scripts\ai-ratchet-gate.exe'
 
 fixture runnerはmanifest、4件のevent、event log hash、canonical output hash、model_internal
 traceをJSONで返します。ブラウザで`http://127.0.0.1:8000`を開き、適応型シミュレーションも
-実行できます。外部AIやAPI keyは不要で、状態遷移の単一writerはローカル決定論コアです。
+実行できます。現在のMVP coreは組み込み決定論providerだけを許可し、外部AIやAPI keyは不要です。
+外部AIは後続の別process JSON/HTTP adapterとして接続します。状態遷移の単一writerはローカル決定論コアです。
 これはBRANCH-001完成、プロダクトMVP完成、公開・応募・政策提言の許可を意味しません。
 
 ## 制約

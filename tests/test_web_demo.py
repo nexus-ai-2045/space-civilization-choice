@@ -65,6 +65,20 @@ def test_domestic_adaptive_override_rejects_forged_base_rule():
         raise AssertionError("forged domestic base_rule_id must fail closed")
 
 
+def test_adaptive_provenance_bundle_rejects_partial_fields():
+    data = web_demo.load_fixture(
+        web_demo.FIXTURES["international_integration"],
+        allow_hackathon_demo_branches=True,
+    )
+    data["rounds"][0]["base_rule_id"] = data["rounds"][0]["rule_id"]
+    try:
+        run_simulation(data, allow_hackathon_demo_branches=True)
+    except SimulationError as error:
+        assert "all present or all absent" in str(error)
+    else:
+        raise AssertionError("partial adaptive provenance must fail closed")
+
+
 def test_replacing_fixture_action_removes_prior_action_effect():
     base = {axis: 0 for axis in AXES}
     base["industrial_reproduction"] = 8

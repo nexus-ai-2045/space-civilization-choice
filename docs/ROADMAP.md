@@ -48,6 +48,7 @@ branch-neutral schemaの固定とmodel card初版はPhase 2着手前に行う。
 - 単一エージェントの構造化行動提案
 - 許可行動・予算・schema検証
 - prompt injection、再試行、費用、棄却のeval
+- core外の別process bounded JSON/HTTP adapter（任意Python provider objectは禁止）
 
 完了条件: LLMを無効化してもsimulation coreが再生でき、LLMが状態を直接変更できない。
 
@@ -61,13 +62,13 @@ branch-neutral schemaの固定とmodel card初版はPhase 2着手前に行う。
 
 ### 2026-08-29 demo vertical slice
 
-時間制約下のハッカソン実演に限り、Phase 2の三分岐、Phase 3の最小比較画面、Phase 4の単一AI提案を
-縦切りで前倒しする。決定論コアを実行権威とし、AI障害時にも同じ入力から完走する。これは各Phaseの
+時間制約下のハッカソン実演に限り、Phase 2の三分岐とPhase 3の最小比較画面を
+縦切りで前倒しする。Phase 4の外部AI接続は後続へ延期する。決定論コアを実行権威とし、これは各Phaseの
 完全な完了や公開deployを意味しない。現在の判断境界は[ADR-0009](adr/0009-local-first-adaptive-simulation-engine.md)を正本とする。
 
 外部AIを必須とする判断は[ADR-0009](adr/0009-local-first-adaptive-simulation-engine.md)で置き換えた。
 現在の実装正本はローカル決定論provider、5主体PDCA、parameter registry、三相traceであり、Google Cloud等は
-このcontractへ接続する後続deployment laneとする。
+別process bounded JSON/HTTP adapterを設計してから接続する後続deployment laneとする。
 
 ## 各phase共通の最小PDCA
 

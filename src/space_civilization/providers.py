@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Protocol
 
 from .agents import AGENT_PREFERENCES
 from .action_catalog import get_action
@@ -20,10 +19,6 @@ ALLOWED_PROVENANCE_TYPES = frozenset(
         "llm",
     }
 )
-
-
-class ProposalProvider(Protocol):
-    def propose(self, *, agent_id: str, year: int, seed: int, state: dict, parameters: dict) -> dict: ...
 
 
 class DeterministicProposalProvider:
@@ -43,18 +38,14 @@ class DeterministicProposalProvider:
         }
 
 
-# Providers may omit provenance_type; the core always assigns it.
+# Proposal payloads may omit provenance_type; the core always assigns it.
 REQUIRED_PROPOSAL_KEYS = frozenset({"agent_id", "action_id", "priority", "rationale"})
 OPTIONAL_PROPOSAL_KEYS = frozenset({"provenance_type"})
 
 
 def derive_provenance_type(provider: object) -> str:
-    """Assign provenance from the configured provider, never from response payload."""
-    declared = getattr(provider, "provenance_type", None)
-    if isinstance(declared, str) and declared in ALLOWED_PROVENANCE_TYPES:
-        return declared
-    provider_id = getattr(provider, "provider_id", None)
-    if provider_id == DeterministicProposalProvider.provider_id:
+    """Assign provenance from the core-owned concrete implementation."""
+    if type(provider) is DeterministicProposalProvider:
         return "deterministic_core"
     return "llm"
 

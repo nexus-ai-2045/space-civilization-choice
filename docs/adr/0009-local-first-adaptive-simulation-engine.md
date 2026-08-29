@@ -18,7 +18,8 @@ scoreや独自ライセンスの実装を、公開シミュレーターへコピ
 
 1. `space-civilization-choice`をparameter registry、action catalog、agent role、transition ruleの正本とする。
 2. 標準decision engineはローカルの`DeterministicProposalProvider`とし、同一入力とseedで再現する。
-3. 外部providerは構造化actionを提案できるが、parameter、delta、stateを直接変更できない。
+3. MVP coreのprovider registryは`DeterministicProposalProvider`だけを許可する。任意のPython objectを
+   providerとして実行しない。
 4. 各ラウンドをPlan、Do、Check、Actに分け、5主体の提案を検証・調停してからコアが遷移する。
 5. 残りhorizonを少数候補で再評価し、先頭portfolioだけを適用して次ラウンドで再観測する。
 6. これはMPCに着想を得た逐次再計画であり、連続最適化や安定性保証を備えるMPCとは称さない。
@@ -42,15 +43,11 @@ parameter registry
 
 ## External provider boundary
 
-外部providerには`ProposalProvider`境界を設ける。timeout、接続失敗（ConnectionError / URLError）、
-schema不正、allowlist外、size超過時は同一入力のローカルproviderへfallbackする。
-コアはprovider呼び出しに所有deadlineを課し、外部providerはisolatable process境界で実行する。
-deadline超過時はworkerをterminate/killし、blocked callを親プロセスに残さない。
-hanging I/Oは`TimeoutError`へ写像してlocal fallbackする。
-`provenance_type`はprovider応答ではなく、設定されたprovider identityからコアが割り当てる。
-providerへ渡すstate / parametersは防御的コピーとし、遷移に使うオブジェクトはコアが保持する。
-provider ID、model ID、provider version、request hash、response hash、validation state、
-fallback reasonをmanifestへ残す。secretや未除去の原文は保存しない。
+外部provider接続はMVP coreに未実装であり、後続laneへ延期する。`run_adaptive_simulation`は互換用の
+`provider`引数を一時的に保持するが、`None`または組み込みproviderの正確な型以外をfail-closedで拒否する。
+外部AIを導入するときは、別processのbounded JSON/HTTP adapterとして設計し、UTF-8 byte上限、schema、
+version、content type、deadline、request/response hashをadapter側で確定してから、検証済みactionだけを
+coreへ渡す。任意のPython object、pickle、provider自己申告metadataをcoreのtrust boundaryに持ち込まない。
 
 Google Cloudのproject作成、IAM、Secret Manager、Cloud Run、GPU、課金、deployは別の外部操作であり、
 このADRは実行許可を与えない。ローカルcontractがgreenになった後、専用deployment ADRと人間承認を要する。
@@ -58,6 +55,6 @@ Google Cloudのproject作成、IAM、Secret Manager、Cloud Run、GPU、課金�
 ## Consequences
 
 - 外部AIなしで完全なdemoとreplayが成立する。
-- 将来のGoogle Cloudまたは他providerをsimulation coreから分離できる。
+- 将来のGoogle Cloudまたは他providerは、別process JSON/HTTP adapterとしてsimulation coreから分離する。
 - 全parameterの総当たりを避け、介入点を説明可能な範囲で探索できる。
 - 外部provider特有の創発性はローカルengine完成後の評価laneとして残る。

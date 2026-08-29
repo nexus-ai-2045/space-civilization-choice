@@ -1,57 +1,15 @@
-import urllib.error
+import pytest
 
 from space_civilization.adaptive_loop import run_adaptive_simulation
 from space_civilization.parameter_registry import expand_preset
-from space_civilization.providers import DeterministicProposalProvider
+from space_civilization.providers import DeterministicProposalProvider, derive_provenance_type
 
 
-class InvalidProvider:
-    def propose(self, **kwargs):
-        return {"agent_id": "forged", "action_id": "not_allowlisted", "priority": -1}
-
-
-class TimeoutProvider:
-    def propose(self, **kwargs):
-        raise TimeoutError("provider deadline exceeded")
-
-
-class ConnectionFailProvider:
-    def propose(self, **kwargs):
-        raise ConnectionError("provider unreachable")
-
-
-class UrlErrorProvider:
-    def propose(self, **kwargs):
-        raise urllib.error.URLError("name or service not known")
-
-
-class MutatingProvider:
-    provider_id = "external_mutator_v1"
-    provenance_type = "llm"
+class ExternalPythonProvider:
+    provider_id = "deterministic_local_v1"
 
     def propose(self, **kwargs):
-        kwargs["parameters"]["supply_disruption"] = 99
-        kwargs["state"]["public_legitimacy"] = -50
-        return {
-            "agent_id": kwargs["agent_id"],
-            "action_id": "train_people",
-            "priority": 0,
-            "rationale": "mutates caller inputs",
-            "provenance_type": "deterministic_core",
-        }
-
-
-class SpoofedProvenanceProvider:
-    provider_id = "external_spoof_v1"
-
-    def propose(self, **kwargs):
-        return {
-            "agent_id": kwargs["agent_id"],
-            "action_id": "train_people",
-            "priority": 0,
-            "rationale": "claims local provenance",
-            "provenance_type": "deterministic_core",
-        }
+        raise AssertionError("closed MVP core must never execute external objects")
 
 
 def test_five_agents_repeat_pdca_for_four_rounds():
@@ -70,36 +28,54 @@ def test_five_agents_repeat_pdca_for_four_rounds():
 
 def test_replay_is_deterministic_and_seed_changes_run():
     params = expand_preset("domestic")
-    provider = DeterministicProposalProvider()
-    left = run_adaptive_simulation(params, seed=7, provider=provider)
-    right = run_adaptive_simulation(params, seed=7, provider=provider)
-    other = run_adaptive_simulation(params, seed=8, provider=provider)
+    left = run_adaptive_simulation(params, seed=7)
+    right = run_adaptive_simulation(params, seed=7, provider=DeterministicProposalProvider())
+    other = run_adaptive_simulation(params, seed=8)
     assert left["canonical_output_hash"] == right["canonical_output_hash"]
     assert left["canonical_output_hash"] != other["canonical_output_hash"]
 
 
 def test_arbiter_never_spends_more_than_round_resources():
-    result = run_adaptive_simulation(expand_preset("open_platform"), seed=3)
-    for round_result in result["rounds"]:
-        assert round_result["resources_used"]["budget"] <= round_result["resources_available"]["budget"]
-        assert round_result["resources_used"]["people"] <= round_result["resources_available"]["people"]
-        assert round_result["resources_used"]["time"] <= round_result["resources_available"]["time"]
-        assert round_result["accepted_actions"] == sorted(
-            round_result["accepted_actions"], key=lambda item: (item["priority"], item["agent_id"], item["action_id"])
+    result = run_adaptive_simulation(expand_preset("balanced"), seed=3)
+    for item in result["rounds"]:
+        assert all(
+            item["resources_used"][key] <= item["resources_available"][key]
+            for key in item["resources_available"]
+        )
+        assert item["accepted_actions"] == sorted(
+            item["accepted_actions"],
+            key=lambda proposal: (
+                proposal["priority"],
+                proposal["agent_id"],
+                proposal["action_id"],
+            ),
         )
 
 
 def test_external_uncertainties_are_applied_and_traced_each_round():
-    result = run_adaptive_simulation(expand_preset("balanced"), seed=12)
-
+    result = run_adaptive_simulation(expand_preset("international"), seed=4)
     assert all(len(item["uncertainty_events"]) == 3 for item in result["rounds"])
-    assert all(event["rule_id"].startswith("U-") for item in result["rounds"] for event in item["uncertainty_events"])
+    assert all(
+        event["rule_id"].startswith("U-")
+        for item in result["rounds"]
+        for event in item["uncertainty_events"]
+    )
 
 
 def test_all_valid_parameter_boundaries_complete_with_explicit_saturation():
+    allocation_ids = {
+        "transport",
+        "autonomy",
+        "life_support",
+        "energy",
+        "domestic_supply",
+        "people_research",
+        "international_connection",
+        "open_platform",
+    }
     high = expand_preset("balanced")
     for key in high:
-        if key not in {"transport", "autonomy", "life_support", "energy", "domestic_supply", "people_research", "international_connection", "open_platform"}:
+        if key not in allocation_ids:
             high[key] = 100
     low = expand_preset("balanced")
     low["industrial_capacity"] = 0
@@ -108,52 +84,11 @@ def test_all_valid_parameter_boundaries_complete_with_explicit_saturation():
     for parameters in (high, low):
         result = run_adaptive_simulation(parameters, seed=5)
         assert all(0 <= value <= 100 for value in result["final_axes"].values())
-        assert all("saturated" in event for item in result["rounds"] for event in item["uncertainty_events"])
-
-
-def test_invalid_provider_output_falls_back_to_valid_local_proposals():
-    result = run_adaptive_simulation(expand_preset("balanced"), seed=6, provider=InvalidProvider())
-    assert all(len(item["provider_errors"]) == 5 for item in result["rounds"])
-    assert all(proposal["provenance_type"] == "deterministic_core" for item in result["rounds"] for proposal in item["proposals"])
-
-
-def test_provider_timeout_falls_back_and_all_rounds_complete():
-    result = run_adaptive_simulation(expand_preset("balanced"), seed=6, provider=TimeoutProvider())
-    assert len(result["rounds"]) == 4
-    assert all(len(item["provider_errors"]) == 5 for item in result["rounds"])
-    assert {error["error"] for item in result["rounds"] for error in item["provider_errors"]} == {"TimeoutError"}
-
-
-def test_provider_connection_loss_falls_back_and_all_rounds_complete():
-    for provider, error_name in (
-        (ConnectionFailProvider(), "ConnectionError"),
-        (UrlErrorProvider(), "URLError"),
-    ):
-        result = run_adaptive_simulation(expand_preset("balanced"), seed=6, provider=provider)
-        assert len(result["rounds"]) == 4
-        assert all(len(item["provider_errors"]) == 5 for item in result["rounds"])
-        assert {error["error"] for item in result["rounds"] for error in item["provider_errors"]} == {error_name}
         assert all(
-            proposal["provenance_type"] == "deterministic_core"
+            "saturated" in event
             for item in result["rounds"]
-            for proposal in item["proposals"]
+            for event in item["uncertainty_events"]
         )
-
-
-def test_provider_cannot_mutate_core_owned_state_or_parameters():
-    params = expand_preset("balanced")
-    baseline = params["supply_disruption"]
-    result = run_adaptive_simulation(params, seed=11, provider=MutatingProvider())
-    assert params["supply_disruption"] == baseline
-    assert result["parameters"]["supply_disruption"] == baseline
-    assert all(item["before"]["public_legitimacy"] >= 0 for item in result["rounds"])
-    assert all(proposal["provenance_type"] == "llm" for item in result["rounds"] for proposal in item["proposals"])
-
-
-def test_provenance_is_derived_from_provider_identity_not_payload():
-    result = run_adaptive_simulation(expand_preset("balanced"), seed=11, provider=SpoofedProvenanceProvider())
-    assert all(proposal["provenance_type"] == "llm" for item in result["rounds"] for proposal in item["proposals"])
-    assert all(not item["provider_errors"] for item in result["rounds"])
 
 
 def test_every_parameter_changes_model_state_or_uncertainty_trace():
@@ -176,209 +111,36 @@ def test_every_parameter_changes_model_state_or_uncertainty_trace():
         ), key
 
 
-class HangingProvider:
-    provider_id = "external_hanging_v1"
-
-    def propose(self, **kwargs):
-        import time
-
-        # Long sleep proves the core must kill the worker rather than abandon a thread.
-        time.sleep(3600)
-        return {
-            "agent_id": kwargs["agent_id"],
-            "action_id": "train_people",
-            "priority": 0,
-            "rationale": "should never return before deadline",
-        }
+def test_closed_registry_rejects_arbitrary_python_provider_objects():
+    with pytest.raises(ValueError, match="future bounded JSON/HTTP adapter"):
+        run_adaptive_simulation(
+            expand_preset("balanced"), seed=18, provider=ExternalPythonProvider()
+        )
 
 
-def test_core_owned_deadline_falls_back_when_provider_hangs():
-    import multiprocessing
-    import time
-
-    before = {child.pid for child in multiprocessing.active_children()}
-    started = time.monotonic()
-    result = run_adaptive_simulation(
-        expand_preset("balanced"),
-        seed=6,
-        provider=HangingProvider(),
-        provider_timeout_seconds=0.05,
-    )
-    elapsed = time.monotonic() - started
-    leftover = [
-        child
-        for child in multiprocessing.active_children()
-        if child.pid not in before and child.is_alive()
-    ]
-    assert elapsed < 15, elapsed
-    assert leftover == []
-    assert len(result["rounds"]) == 4
-    assert all(len(item["provider_errors"]) == 5 for item in result["rounds"])
-    assert {error["error"] for item in result["rounds"] for error in item["provider_errors"]} == {"TimeoutError"}
-    assert all(
-        proposal["provenance_type"] == "deterministic_core"
-        for item in result["rounds"]
-        for proposal in item["proposals"]
-    )
+def test_timeout_option_is_deferred_with_external_adapter():
+    with pytest.raises(ValueError, match="future external adapter"):
+        run_adaptive_simulation(
+            expand_preset("balanced"), seed=19, provider_timeout_seconds=0.1
+        )
 
 
-class NonSerializableProvider:
-    provider_id = "external_nonserializable_v1"
-
-    def __init__(self):
-        self.callback = lambda: None
-
-    def propose(self, **kwargs):
-        raise AssertionError("must not execute")
+def test_deterministic_provenance_requires_concrete_builtin_type():
+    assert derive_provenance_type(DeterministicProposalProvider()) == "deterministic_core"
+    assert derive_provenance_type(ExternalPythonProvider()) == "llm"
 
 
-def test_nonserializable_provider_falls_back_and_is_audited():
-    result = run_adaptive_simulation(
-        expand_preset("balanced"), seed=8, provider=NonSerializableProvider()
-    )
-    assert all(len(item["provider_errors"]) == 5 for item in result["rounds"])
-    assert all(
-        audit["validation_state"] == "fallback_after_provider_error"
-        and audit["fallback_used"]
-        and len(audit["request_hash"]) == 64
-        and audit["response_hash"] is None
-        for item in result["rounds"]
-        for audit in item["provider_audit"]
-    )
-
-
-def test_external_provider_manifest_binds_identity_and_hashes():
-    result = run_adaptive_simulation(
-        expand_preset("balanced"), seed=9, provider=SpoofedProvenanceProvider()
-    )
-    assert result["provider_manifest"]["provider_id"] == "external_spoof_v1"
-    assert all(
-        audit["provider_id"] == "external_spoof_v1"
-        and len(audit["request_hash"]) == 64
-        and len(audit["response_hash"]) == 64
-        and audit["validation_state"] == "accepted_for_run"
-        for item in result["rounds"]
-        for audit in item["provider_audit"]
-    )
-
-
-class SpoofedBuiltinHangingProvider:
-    provider_id = DeterministicProposalProvider.provider_id
-
-    def __init__(self):
-        self.calls = 0
-
-    def propose(self, **kwargs):
-        import time
-
-        self.calls += 1
-        time.sleep(3600)
-
-
-def test_spoofed_builtin_provider_id_still_uses_isolated_deadline():
-    provider = SpoofedBuiltinHangingProvider()
-    result = run_adaptive_simulation(
-        expand_preset("balanced"),
-        seed=10,
-        provider=provider,
-        provider_timeout_seconds=0.05,
-    )
-    assert provider.calls == 0, "isolated child state must not mutate the core-owned provider"
-    assert all(len(item["provider_errors"]) == 5 for item in result["rounds"])
-    assert all(
-        audit["response_hash"] is None
-        for item in result["rounds"]
-        for audit in item["provider_audit"]
-    )
-
-
-class OversizedInvalidProvider:
-    provider_id = "external_oversized_invalid_v1"
-
-    def propose(self, **kwargs):
-        return {
-            "agent_id": kwargs["agent_id"],
-            "action_id": "train_people",
-            "priority": 0,
-            "rationale": "x" * 1_000_000,
-        }
-
-
-def test_oversized_invalid_response_is_bounded_before_ipc_and_hash_retained():
-    result = run_adaptive_simulation(
-        expand_preset("balanced"), seed=11, provider=OversizedInvalidProvider()
-    )
-    assert all(
-        error["error"] == "ProviderInvocationError" and len(str(error)) < 500
-        for item in result["rounds"]
-        for error in item["provider_errors"]
-    )
-    assert all(
-        len(audit["response_hash"]) == 64
-        and audit["validation_state"] == "fallback_after_provider_error"
-        for item in result["rounds"]
-        for audit in item["provider_audit"]
-    )
-
-
-class MetadataObject:
-    def __str__(self):
-        return "metadata-v1"
-
-
-class NonJsonMetadataProvider(SpoofedProvenanceProvider):
-    provider_id = "external_metadata_v1"
-    model_id = MetadataObject()
-    model_version = MetadataObject()
-
-
-def test_non_json_provider_metadata_is_normalized_before_manifest_hashing():
-    result = run_adaptive_simulation(
-        expand_preset("balanced"), seed=12, provider=NonJsonMetadataProvider()
-    )
+def test_manifest_uses_core_owned_provider_identity():
+    result = run_adaptive_simulation(expand_preset("balanced"), seed=20)
     assert result["provider_manifest"] == {
-        "provider_id": "external_metadata_v1",
-        "model_id": "metadata-v1",
-        "model_version": "metadata-v1",
+        "provider_id": "deterministic_local_v1",
+        "model_id": None,
+        "model_version": None,
     }
-    assert len(result["canonical_output_hash"]) == 64
-
-
-class BytesRationaleProvider:
-    provider_id = "external_bytes_v1"
-
-    def propose(self, **kwargs):
-        return {
-            "agent_id": kwargs["agent_id"],
-            "action_id": "train_people",
-            "priority": 0,
-            "rationale": b"not-json-text",
-        }
-
-
-def test_non_json_response_retains_transport_hash_but_not_validated_hash():
-    result = run_adaptive_simulation(
-        expand_preset("balanced"), seed=13, provider=BytesRationaleProvider()
-    )
     assert all(
-        len(audit["transport_response_hash"]) == 64
-        and audit["response_hash"] == audit["transport_response_hash"]
-        and audit["validated_response_hash"] is None
+        audit["provider_id"] == "deterministic_local_v1"
+        and audit["transport_response_hash"] == audit["validated_response_hash"]
+        and audit["fallback_used"] is False
         for item in result["rounds"]
         for audit in item["provider_audit"]
     )
-
-
-class FalseyProvider(SpoofedProvenanceProvider):
-    provider_id = "external_falsey_v1"
-
-    def __len__(self):
-        return 0
-
-
-def test_falsey_external_provider_is_not_replaced_by_local_provider():
-    result = run_adaptive_simulation(
-        expand_preset("balanced"), seed=14, provider=FalseyProvider()
-    )
-    assert result["provider_manifest"]["provider_id"] == "external_falsey_v1"
-    assert all(not item["provider_errors"] for item in result["rounds"])

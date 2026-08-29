@@ -42,7 +42,7 @@ goal_id: space-civilization-choice-mvp-v1
 - 宇宙 × 認知・文化を二つの出発領域とし、経済・組織を両者の伝達経路とする
 - 予算配分、依存、公開度、人材、外部shockを変更して反復実行できるparameterized simulation
 - 六観測軸、モデル内部遷移trace、研究根拠台帳、model card、run manifest
-- LLMなしで再生できる決定論的コアと、ADR-0008で境界を固定したハッカソン用の限定的なLLM提案
+- LLMなしで再生できる決定論的コア。外部AI接続はMVP coreに含めず、ADR-0009に従う後続の別process bounded JSON/HTTP adapterへ延期する
 - 深い不確実性下で、単一予測ではなく脆弱性、後悔、選択肢保持を比較する方法
 
 ## 非目標
