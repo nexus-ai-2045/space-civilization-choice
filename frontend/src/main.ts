@@ -11,7 +11,7 @@ let latest:SimulationResult|null=null;
 let selectedRound=4;
 let game:Phaser.Game|null=null;
 
-app.innerHTML=`<header><div><strong>CAUSAL CONSTELLATION</strong><h1>宇宙文明の選択肢を、同じ未来条件で比較する</h1></div><div class="mode">ローカル・マルチエージェントPDCA（4ラウンド）</div><label>シナリオ名<input value="デフォルトシナリオ" aria-label="シナリオ名"></label></header><main><aside class="panel controls"><h2>パラメータを編集</h2><div id="control-list"></div><button id="run">▶ シミュレーションを実行</button><output id="status">実行待ち</output></aside><section class="stage"><div id="game" aria-label="三領域の因果コンステレーション"></div><div class="legend">→ 因果リンク　⋯ フィードバックループ　✦ 選択された介入パス</div><section class="timeline"><h2>シミュレーションタイムライン（PDCAサイクル）</h2><div id="rounds"></div></section></section><aside class="panel evidence"><h2>エビデンス＆トレース</h2><div id="current"></div><p id="engine"></p><h3>提案と意思決定</h3><div id="proposals"></div><h3>アウトプット指標（6軸）</h3><div id="axes"></div><details><summary>因果トレースを表示</summary><ol id="trace"></ol></details></aside></main><footer>本シミュレーションは仮説的な因果関係に基づく探索的分析であり、実在の未来を保証するものではありません。<span>● ローカル実行モード</span></footer>`;
+app.innerHTML=`<header><div><strong>CAUSAL CONSTELLATION</strong><h1>宇宙文明の選択肢を、同じ未来条件で比較する</h1></div><div class="mode">ローカル・マルチエージェントPDCA（4ラウンド）</div><label>シナリオ名<input value="デフォルトシナリオ" aria-label="シナリオ名"></label></header><main><aside class="panel controls"><h2>パラメータを編集</h2><div id="control-list"></div><button id="run">▶ シミュレーションを実行</button><output id="status">実行待ち</output></aside><section class="stage"><div id="game" aria-label="三領域の因果コンステレーション"></div><div class="legend">→ 因果リンク　⋯ フィードバックループ　✦ 選択された介入パス</div><section class="timeline"><h2>シミュレーションタイムライン（年ごと完全PDCA × 4）</h2><div id="rounds"></div></section></section><aside class="panel evidence"><h2>エビデンス＆トレース</h2><div id="current"></div><p id="engine"></p><p id="replay-hash" class="replay-hash"></p><h3>提案と意思決定</h3><div id="proposals"></div><h3>アウトプット指標（6軸）</h3><div id="axes"></div><details><summary>因果トレースを表示</summary><ol id="trace"></ol></details></aside></main><footer>本シミュレーションは仮説的な因果関係に基づく探索的分析であり、実在の未来を保証するものではありません。<span>● ローカル実行モード</span></footer>`;
 
 function el<K extends keyof HTMLElementTagNameMap>(tag:K,cls?:string,text?:string){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
 function clear(q:string){const n=document.querySelector(q)!;n.replaceChildren();return n}
@@ -68,10 +68,14 @@ function render(result:SimulationResult,round=selectedRound){
  const current=clear('#current'),box=el('div','current');
  box.append(el('span','','現在のラウンド'));
  const strong=el('strong','',String(view.year));
- strong.append(el('small','',`（ラウンド ${view.round}）`));
- box.append(strong,el('span','',`経過ターン ${view.round*6} / 24`));
+ strong.append(el('small','',`（ラウンド ${view.round} / 4）`));
+ box.append(strong,el('span','','当該年のPDCA: 計画 → 実行 → 評価 → 改善（完了）'),el('span','',`経過ターン ${view.round*6} / 24`));
  current.append(box);
  document.querySelector('#engine')!.textContent=`意思決定エンジン: ${result.decision_engine}`;
+ const hashNode=document.querySelector('#replay-hash')!;
+ const hash=result.canonical_output_hash||'';
+ hashNode.textContent=hash?`再実行hash: ${hash}`:'再実行hash: （未取得）';
+ hashNode.setAttribute('title',hash||'');
  const proposals=clear('#proposals');
  view.proposals.forEach(p=>{
   const row=el('div',`proposal ${p.accepted?'yes':'no'}`),title=el('span','',`${p.accepted?'✓':'×'} ${p.title}`),score=el('b','',`${p.score>0?'+':''}${p.score}`);
@@ -95,7 +99,7 @@ function render(result:SimulationResult,round=selectedRound){
   const b=el('button',`round ${i+1===view.round?'active':''}`) as HTMLButtonElement;
   b.type='button';
   b.dataset.round=String(i+1);
-  b.append(el('b','',String(y)),el('span','',['計画 (Plan)','実行 (Do)','評価 (Check)','改善 (Act)'][i]));
+  b.append(el('b','',String(y)),el('span','',`ラウンド ${i+1} · Plan→Do→Check→Act`));
   b.addEventListener('click',()=>{if(latest)render(latest,i+1)});
   rounds.append(b);
  });

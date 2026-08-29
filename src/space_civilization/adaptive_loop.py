@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-import concurrent.futures
+import multiprocessing
 import urllib.error
 from copy import deepcopy
+from multiprocessing.context import BaseContext
+from typing import Any
 
 from .action_catalog import get_action
 from .agents import AGENT_IDS
@@ -31,8 +33,48 @@ _PROVIDER_FALLBACK_ERRORS = (
 
 # Core-owned deadline so hanging I/O cannot block the deterministic run.
 DEFAULT_PROVIDER_TIMEOUT_SECONDS = 2.0
+_PROVIDER_JOIN_GRACE_SECONDS = 0.5
 
 THREE_PHASE_CHAIN = ("cognitive_cultural", "economic_organizational", "physical_material", "cognitive_cultural")
+
+_ERROR_NAME_TO_TYPE: dict[str, type[BaseException]] = {
+    "TimeoutError": TimeoutError,
+    "ConnectionError": ConnectionError,
+    "OSError": OSError,
+    "KeyError": KeyError,
+    "TypeError": TypeError,
+    "ValueError": ValueError,
+    "URLError": urllib.error.URLError,
+}
+
+
+def _provider_process_worker(
+    provider: ProposalProvider,
+    kwargs: dict[str, Any],
+    result_queue: multiprocessing.Queue,
+) -> None:
+    """Isolated worker entrypoint; must stay picklable for spawn contexts."""
+    try:
+        result_queue.put(("ok", provider.propose(**kwargs)))
+    except BaseException as error:  # noqa: BLE001 - resurface exact failure to the core
+        result_queue.put(("err", type(error).__name__, str(error)))
+
+
+def _terminate_provider_process(process: multiprocessing.Process) -> None:
+    """Hard-stop a timed-out provider worker so blocked calls cannot linger."""
+    if not process.is_alive():
+        process.join(timeout=_PROVIDER_JOIN_GRACE_SECONDS)
+        return
+    process.terminate()
+    process.join(timeout=_PROVIDER_JOIN_GRACE_SECONDS)
+    if process.is_alive():
+        process.kill()
+        process.join(timeout=_PROVIDER_JOIN_GRACE_SECONDS)
+
+
+def _multiprocessing_context() -> BaseContext:
+    # spawn avoids inheriting parent threads and keeps the worker boundary isolatable.
+    return multiprocessing.get_context("spawn")
 
 
 def _propose_with_deadline(
@@ -48,29 +90,47 @@ def _propose_with_deadline(
     """Invoke a provider behind a core-owned deadline; hanging I/O becomes TimeoutError."""
     if timeout_seconds <= 0:
         raise ValueError("provider timeout must be positive")
-    # Local deterministic proposals are sync and immediate; skip thread hop.
+    # Local deterministic proposals are sync and immediate; skip process hop.
     if getattr(provider, "provider_id", None) == DeterministicProposalProvider.provider_id:
         return provider.propose(
             agent_id=agent_id, year=year, seed=seed, state=state, parameters=parameters
         )
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-    try:
-        future = executor.submit(
-            provider.propose,
-            agent_id=agent_id,
-            year=year,
-            seed=seed,
-            state=state,
-            parameters=parameters,
-        )
-        try:
-            return future.result(timeout=timeout_seconds)
-        except concurrent.futures.TimeoutError as error:
-            future.cancel()
-            raise TimeoutError("provider proposal exceeded core-owned deadline") from error
-    finally:
-        executor.shutdown(wait=False, cancel_futures=True)
 
+    ctx = _multiprocessing_context()
+    result_queue: multiprocessing.Queue = ctx.Queue(maxsize=1)
+    kwargs = {
+        "agent_id": agent_id,
+        "year": year,
+        "seed": seed,
+        "state": state,
+        "parameters": parameters,
+    }
+    process = ctx.Process(
+        target=_provider_process_worker,
+        args=(provider, kwargs, result_queue),
+        daemon=True,
+        name=f"scc-provider-{agent_id}-{year}",
+    )
+    process.start()
+    process.join(timeout_seconds)
+    if process.is_alive():
+        _terminate_provider_process(process)
+        raise TimeoutError("provider proposal exceeded core-owned deadline")
+
+    process.join(timeout=_PROVIDER_JOIN_GRACE_SECONDS)
+    try:
+        message = result_queue.get_nowait()
+    except Exception as error:
+        raise TimeoutError("provider worker exited without a result") from error
+
+    if message[0] == "ok":
+        return message[1]
+
+    error_name, error_text = message[1], message[2]
+    error_type = _ERROR_NAME_TO_TYPE.get(error_name, ValueError)
+    if error_type is urllib.error.URLError:
+        raise urllib.error.URLError(error_text)
+    raise error_type(error_text)
 def _initial_axes(parameters: dict[str, int]) -> dict[str, int]:
     return {
         "access_and_operation": sum(parameters[key] for key in ("technology_readiness", "transport", "autonomy", "life_support", "energy")) // 5,

@@ -122,3 +122,13 @@ def test_constellation_scene_destroys_children_on_redraw():
     assert "killAll()" in source
     assert "destroy(true)" in source
     assert "removeAll(true)" not in source or "clearDisplayObjects" in source
+
+
+def test_adaptive_ui_exposes_replay_hash_and_full_pdca_round_labels():
+    source = (web_demo.REPO_ROOT / "frontend/src/main.ts").read_text(encoding="utf-8")
+    assert "canonical_output_hash" in source
+    assert "再実行hash" in source
+    assert "replay-hash" in source
+    assert "Plan→Do→Check→Act" in source
+    assert "年ごと完全PDCA" in source
+    assert "['計画 (Plan)','実行 (Do)','評価 (Check)','改善 (Act)']" not in source
