@@ -1169,9 +1169,10 @@ def _validate_done_when_evidence(
             )
             continue
         resolved_artifacts[role] = resolved
-        artifact_bytes = resolved.read_bytes()
-        if role in {"canonical_manifest", "event_log", "trace"}:
-            artifact_bytes = artifact_bytes.replace(b"\r\n", b"\n")
+        # Evidence hashes describe canonical repository text, not a platform's
+        # checkout newline convention. All registered artifacts are UTF-8 text;
+        # normalize CRLF/CR so the same exact HEAD verifies on Windows and Linux.
+        artifact_bytes = resolved.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
         actual_hash = hashlib.sha256(artifact_bytes).hexdigest()
         expected_hash = artifact_hashes.get(role)
         if not _is_digest(expected_hash) or expected_hash != actual_hash:

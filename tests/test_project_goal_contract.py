@@ -17,6 +17,10 @@ MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
 
+def _canonical_text_bytes(path: Path) -> bytes:
+    return path.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+
+
 class ProjectGoalContractTest(unittest.TestCase):
     def _copy_contract(self, destination: Path) -> None:
         for relative in MODULE.REQUIRED_FILES:
@@ -95,7 +99,7 @@ class ProjectGoalContractTest(unittest.TestCase):
             "status": "passed",
             "artifacts": artifacts,
             "artifact_sha256": {
-                role: hashlib.sha256((repo / target).read_bytes()).hexdigest()
+                role: hashlib.sha256(_canonical_text_bytes(repo / target)).hexdigest()
                 for role, target in artifacts.items()
             },
         }
@@ -335,7 +339,7 @@ class ProjectGoalContractTest(unittest.TestCase):
             receipt = tmp_path / "evidence/done-when/REPLAY-001.json"
             receipt_payload = json.loads(receipt.read_text(encoding="utf-8"))
             receipt_payload["artifact_sha256"]["canonical_manifest"] = hashlib.sha256(
-                stored.read_bytes().replace(b"\r\n", b"\n")
+                _canonical_text_bytes(stored)
             ).hexdigest()
             receipt.write_text(json.dumps(receipt_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
