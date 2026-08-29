@@ -10,7 +10,13 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from space_civilization import SimulationError, load_fixture, run_simulation, sha256_json
+from space_civilization import (
+    SimulationError,
+    common_scenario_snapshot,
+    load_fixture,
+    run_simulation,
+    sha256_json,
+)
 
 FIXTURE = ROOT / "fixtures/phase1_domestic_autonomy.json"
 
@@ -40,10 +46,10 @@ def test_different_seed_changes_seeded_exogenous_stream_and_event_log():
 
 
 @pytest.mark.parametrize(
-    ("field", "replacement"),
+    ("field", "replacement", "hash_must_change"),
     [
-        ("action", "qualify_redundant_component_supply"),
-        ("exogenous_event", "single_supplier_disruption"),
+        ("action", "qualify_redundant_component_supply", False),
+        ("exogenous_event", "single_supplier_disruption", True),
         (
             "axis_deltas",
             {
@@ -57,10 +63,11 @@ def test_different_seed_changes_seeded_exogenous_stream_and_event_log():
                     "public_legitimacy",
                 )
             },
+            False,
         ),
     ],
 )
-def test_scenario_snapshot_hash_binds_every_round_input(field, replacement):
+def test_scenario_snapshot_hash_binds_shared_inputs_only(field, replacement, hash_must_change):
     first_fixture = load_fixture(FIXTURE)
     second_fixture = load_fixture(FIXTURE)
     second_fixture["rounds"][0][field] = replacement
@@ -68,7 +75,25 @@ def test_scenario_snapshot_hash_binds_every_round_input(field, replacement):
     first = run_simulation(first_fixture)
     second = run_simulation(second_fixture)
 
-    assert first["manifest"]["scenario_snapshot_hash"] != second["manifest"]["scenario_snapshot_hash"]
+    if hash_must_change:
+        assert first["manifest"]["scenario_snapshot_hash"] != second["manifest"]["scenario_snapshot_hash"]
+    else:
+        assert first["manifest"]["scenario_snapshot_hash"] == second["manifest"]["scenario_snapshot_hash"]
+        assert first["event_log_hash"] != second["event_log_hash"]
+
+
+def test_common_scenario_snapshot_excludes_branch_specific_fields():
+    first = load_fixture(FIXTURE)
+    second = load_fixture(FIXTURE)
+    second["branch"] = "open_platform"
+    second["rounds"][0]["action"] = "qualify_redundant_component_supply"
+    second["rounds"][0]["actor"] = "research_and_next_generation_alliance"
+    second["rounds"][0]["rule_id"] = "R-OTHER-01"
+    second["rounds"][0]["evidence_ref"] = "model-assumption:other"
+
+    assert sha256_json(common_scenario_snapshot(first)) == sha256_json(
+        common_scenario_snapshot(second)
+    )
 
 
 @pytest.mark.parametrize("branch", ["international_integration", "open_platform"])

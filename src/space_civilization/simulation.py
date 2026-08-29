@@ -150,10 +150,29 @@ def build_model_internal_trace(events: list[dict[str, Any]]) -> list[dict[str, A
     return records
 
 
+def common_scenario_snapshot(fixture: dict[str, Any]) -> dict[str, Any]:
+    """BRANCH-001で三分岐が共有するscenario入力だけを抜き出す。
+
+    branch、actor、action、axis_deltas、rule_id、evidence_refは分岐固有の実行入力なので
+    共有snapshot hashへ含めない。seed / model_versionはreplay署名の別フィールドとして扱う。
+    """
+    return {
+        "scenario_snapshot_id": fixture["scenario_snapshot_id"],
+        "initial_state": deepcopy(fixture["initial_state"]),
+        "rounds": [
+            {
+                "year": item["year"],
+                "exogenous_event": item["exogenous_event"],
+            }
+            for item in fixture["rounds"]
+        ],
+    }
+
+
 def run_simulation(fixture: dict[str, Any]) -> dict[str, Any]:
     validate_fixture(fixture)
-    # シミュレーションを決定するfixture全体をsnapshotとして束縛する。
-    scenario_snapshot_hash = sha256_json(fixture)
+    # 共有scenario入力だけをhashし、分岐固有の実行入力はevent log側へ分離する。
+    scenario_snapshot_hash = sha256_json(common_scenario_snapshot(fixture))
     exogenous_event_stream = [
         {
             "year": item["year"],

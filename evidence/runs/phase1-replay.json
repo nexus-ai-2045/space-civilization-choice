@@ -2,16 +2,16 @@
   "schema": "space_civilization_run_manifest.v1",
   "replays": [
     {
-      "scenario_snapshot_hash": "2d4e6ba483034e3f213f61893ee1566cfb399c176126000c7edae55f30aab8f9",
+      "scenario_snapshot_hash": "324182e2a85978a261bf865a58b24c7a6de88e8b572c863c1aa3371f5b030724",
       "seed": 20260828,
       "model_version": "phase1-rule-model-v1",
-      "canonical_output_hash": "b7499a3937b7ac7deaef2e9672ecc137fe3d74f8d984b4974c478e4b0df194b1"
+      "canonical_output_hash": "a37bf8360934fd70fe1b36a1703fa6171c21ac51bc9b1c59c031062a5b0c18fe"
     },
     {
-      "scenario_snapshot_hash": "2d4e6ba483034e3f213f61893ee1566cfb399c176126000c7edae55f30aab8f9",
+      "scenario_snapshot_hash": "324182e2a85978a261bf865a58b24c7a6de88e8b572c863c1aa3371f5b030724",
       "seed": 20260828,
       "model_version": "phase1-rule-model-v1",
-      "canonical_output_hash": "b7499a3937b7ac7deaef2e9672ecc137fe3d74f8d984b4974c478e4b0df194b1"
+      "canonical_output_hash": "a37bf8360934fd70fe1b36a1703fa6171c21ac51bc9b1c59c031062a5b0c18fe"
     }
   ]
 }

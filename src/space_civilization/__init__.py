@@ -3,6 +3,7 @@
 from .simulation import (
     SimulationError,
     build_model_internal_trace,
+    common_scenario_snapshot,
     load_fixture,
     run_simulation,
     sha256_json,
@@ -11,6 +12,7 @@ from .simulation import (
 __all__ = [
     "SimulationError",
     "build_model_internal_trace",
+    "common_scenario_snapshot",
     "load_fixture",
     "run_simulation",
     "sha256_json",

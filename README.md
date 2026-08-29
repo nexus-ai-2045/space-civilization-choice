@@ -140,8 +140,10 @@ canonical output hash一致と六軸deltaのmodel_internal traceまで実装し�
 ### ローカル検査
 
 プロダクトは未実装ですが、ゴール契約と公開境界は検査できます。
+クリーンなcloneでは、CIと同じpinned依存を入れてから検査してください。
 
 ```powershell
+py -3.13 -m pip install --disable-pip-version-check -r requirements-dev.txt
 py -3.13 -m pytest -q
 py -3.13 scripts/check_project_goal.py --json
 py -3.13 scripts/run_phase1_fixture.py

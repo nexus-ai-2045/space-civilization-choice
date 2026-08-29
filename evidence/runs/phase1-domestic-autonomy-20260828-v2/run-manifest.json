@@ -1,6 +1,6 @@
 {
   "branch_id": "domestic_autonomy",
-  "canonical_output_hash": "b7499a3937b7ac7deaef2e9672ecc137fe3d74f8d984b4974c478e4b0df194b1",
+  "canonical_output_hash": "a37bf8360934fd70fe1b36a1703fa6171c21ac51bc9b1c59c031062a5b0c18fe",
   "canonical_result": {
     "event_log_hash": "3dae2978548543716b8c3bd35044381fe51c92f06f797f53418e08521f3bb130",
     "events": [
@@ -252,7 +252,7 @@
       "branch_id": "domestic_autonomy",
       "exogenous_event_stream_hash": "c64554c05e01ccf8528084aae0d968f6cab8dcde08e4666a6abc262d868bf485",
       "model_version": "phase1-rule-model-v1",
-      "scenario_snapshot_hash": "adb81b189dfa4bc5806b1982871641ebc0844a1e0ce26ea91e9bfa1b40baa4ac",
+      "scenario_snapshot_hash": "324182e2a85978a261bf865a58b24c7a6de88e8b572c863c1aa3371f5b030724",
       "scenario_snapshot_id": "jp-space-choice-2026-phase1-v1",
       "seed": 20260828
     }
@@ -261,7 +261,7 @@
   "event_log_hash": "3dae2978548543716b8c3bd35044381fe51c92f06f797f53418e08521f3bb130",
   "exogenous_event_stream_hash": "c64554c05e01ccf8528084aae0d968f6cab8dcde08e4666a6abc262d868bf485",
   "model_version": "phase1-rule-model-v1",
-  "scenario_snapshot_hash": "adb81b189dfa4bc5806b1982871641ebc0844a1e0ce26ea91e9bfa1b40baa4ac",
+  "scenario_snapshot_hash": "324182e2a85978a261bf865a58b24c7a6de88e8b572c863c1aa3371f5b030724",
   "scenario_snapshot_id": "jp-space-choice-2026-phase1-v1",
   "schema": "space_civilization_stored_run.v1",
   "seed": 20260828

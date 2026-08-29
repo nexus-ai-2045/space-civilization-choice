@@ -437,6 +437,192 @@ class ProjectGoalContractTest(unittest.TestCase):
             {item.get("reason") for item in report["findings"]},
         )
 
+    def test_replay_rejects_discontinuous_events_and_final_state_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            tmp_path = Path(directory)
+            stored, event_log, receipt = self._prepare_replay_evidence(tmp_path)
+            events = [
+                json.loads(line)
+                for line in event_log.read_text(encoding="utf-8").splitlines()
+            ]
+            events[1]["before"] = dict(events[1]["before"])
+            events[1]["before"]["public_legitimacy"] = (
+                events[1]["before"]["public_legitimacy"] + 1
+            )
+            event_log.write_text(
+                "".join(json.dumps(event, ensure_ascii=False) + "\n" for event in events),
+                encoding="utf-8",
+            )
+            payload = json.loads(stored.read_text(encoding="utf-8"))
+            payload["canonical_result"]["events"] = events
+            event_hash = MODULE._sha256_json(events)
+            payload["event_log_hash"] = event_hash
+            payload["canonical_result"]["event_log_hash"] = event_hash
+            computed = MODULE._sha256_json(payload["canonical_result"])
+            payload["canonical_output_hash"] = computed
+            stored.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            replay = tmp_path / "evidence/runs/phase1-replay.json"
+            replay_payload = json.loads(replay.read_text(encoding="utf-8"))
+            for run in replay_payload["replays"]:
+                run["canonical_output_hash"] = computed
+            replay.write_text(json.dumps(replay_payload), encoding="utf-8")
+            receipt_payload = json.loads(receipt.read_text(encoding="utf-8"))
+            receipt_payload["result"]["canonical_output_hash"] = computed
+            for role, path in {
+                "run_manifest": replay,
+                "canonical_manifest": stored,
+                "event_log": event_log,
+            }.items():
+                receipt_payload["artifact_sha256"][role] = hashlib.sha256(
+                    _canonical_text_bytes(path)
+                ).hexdigest()
+            receipt.write_text(json.dumps(receipt_payload), encoding="utf-8")
+
+            report = MODULE.build_report(tmp_path)
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "stored_run_artifacts_invalid",
+            {item.get("reason") for item in report["findings"]},
+        )
+
+    def test_replay_rejects_signature_decoupled_from_persisted_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            tmp_path = Path(directory)
+            _stored, _event_log, receipt = self._prepare_replay_evidence(tmp_path)
+            replay = tmp_path / "evidence/runs/phase1-replay.json"
+            replay_payload = json.loads(replay.read_text(encoding="utf-8"))
+            for run in replay_payload["replays"]:
+                run["scenario_snapshot_hash"] = "f" * 64
+            replay.write_text(json.dumps(replay_payload), encoding="utf-8")
+            receipt_payload = json.loads(receipt.read_text(encoding="utf-8"))
+            receipt_payload["artifact_sha256"]["run_manifest"] = hashlib.sha256(
+                _canonical_text_bytes(replay)
+            ).hexdigest()
+            receipt.write_text(json.dumps(receipt_payload), encoding="utf-8")
+
+            report = MODULE.build_report(tmp_path)
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "stored_run_artifacts_invalid",
+            {item.get("reason") for item in report["findings"]},
+        )
+
+    def test_replay_rejects_noncanonical_event_axes_even_when_six_match(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            tmp_path = Path(directory)
+            stored, event_log, receipt = self._prepare_replay_evidence(tmp_path)
+            events = [
+                json.loads(line)
+                for line in event_log.read_text(encoding="utf-8").splitlines()
+            ]
+            renamed = {f"axis_{index}": index for index in range(6)}
+            for event in events:
+                event["before"] = dict(renamed)
+                event["after"] = dict(renamed)
+                event["axis_deltas"] = {key: 0 for key in renamed}
+            event_log.write_text(
+                "".join(json.dumps(event, ensure_ascii=False) + "\n" for event in events),
+                encoding="utf-8",
+            )
+            payload = json.loads(stored.read_text(encoding="utf-8"))
+            payload["canonical_result"]["events"] = events
+            payload["canonical_result"]["final_state"]["axes"] = dict(renamed)
+            event_hash = MODULE._sha256_json(events)
+            payload["event_log_hash"] = event_hash
+            payload["canonical_result"]["event_log_hash"] = event_hash
+            computed = MODULE._sha256_json(payload["canonical_result"])
+            payload["canonical_output_hash"] = computed
+            stored.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            replay = tmp_path / "evidence/runs/phase1-replay.json"
+            replay_payload = json.loads(replay.read_text(encoding="utf-8"))
+            for run in replay_payload["replays"]:
+                run["canonical_output_hash"] = computed
+            replay.write_text(json.dumps(replay_payload), encoding="utf-8")
+            receipt_payload = json.loads(receipt.read_text(encoding="utf-8"))
+            receipt_payload["result"]["canonical_output_hash"] = computed
+            for role, path in {
+                "run_manifest": replay,
+                "canonical_manifest": stored,
+                "event_log": event_log,
+            }.items():
+                receipt_payload["artifact_sha256"][role] = hashlib.sha256(
+                    _canonical_text_bytes(path)
+                ).hexdigest()
+            receipt.write_text(json.dumps(receipt_payload), encoding="utf-8")
+
+            report = MODULE.build_report(tmp_path)
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "stored_run_artifacts_invalid",
+            {item.get("reason") for item in report["findings"]},
+        )
+
+    def test_replay_rejects_unhashable_signature_with_structured_finding(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            tmp_path = Path(directory)
+            _stored, _event_log, receipt = self._prepare_replay_evidence(tmp_path)
+            replay = tmp_path / "evidence/runs/phase1-replay.json"
+            replay_payload = json.loads(replay.read_text(encoding="utf-8"))
+            for run in replay_payload["replays"]:
+                run["scenario_snapshot_hash"] = {"nested": True}
+            replay.write_text(json.dumps(replay_payload), encoding="utf-8")
+            receipt_payload = json.loads(receipt.read_text(encoding="utf-8"))
+            receipt_payload["artifact_sha256"]["run_manifest"] = hashlib.sha256(
+                _canonical_text_bytes(replay)
+            ).hexdigest()
+            receipt.write_text(json.dumps(receipt_payload), encoding="utf-8")
+
+            report = MODULE.build_report(tmp_path)
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "replay_result_invalid",
+            {item.get("reason") for item in report["findings"]},
+        )
+
+    def test_trace_rejects_missing_provenance_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            tmp_path = Path(directory)
+            self._copy_contract(tmp_path)
+            for relative in (
+                "tests/test_phase1_simulation.py",
+                "evidence/runs/phase1-domestic-autonomy-20260828-v2/trace.jsonl",
+                "evidence/done-when/TRACE-001.json",
+            ):
+                source = ROOT / relative
+                target = tmp_path / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(source.read_bytes())
+            self._activate_done_when(tmp_path, "TRACE-001")
+
+            trace = tmp_path / "evidence/runs/phase1-domestic-autonomy-20260828-v2/trace.jsonl"
+            records = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+            for record in records:
+                record.pop("base_axis_deltas", None)
+                record.pop("exogenous_effect", None)
+                record.pop("random_draw", None)
+            trace.write_text(
+                "\n".join(json.dumps(record, ensure_ascii=False) for record in records) + "\n",
+                encoding="utf-8",
+            )
+            receipt = tmp_path / "evidence/done-when/TRACE-001.json"
+            payload = json.loads(receipt.read_text(encoding="utf-8"))
+            payload["artifact_sha256"]["trace"] = hashlib.sha256(
+                _canonical_text_bytes(trace)
+            ).hexdigest()
+            receipt.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            report = MODULE.build_report(tmp_path)
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "trace_result_invalid",
+            {item.get("reason") for item in report["findings"]},
+        )
+
     def test_trace_rejects_noncanonical_axes_even_when_six_are_present(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             tmp_path = Path(directory)
@@ -630,12 +816,13 @@ class ProjectGoalContractTest(unittest.TestCase):
             ci_receipt = tmp_path / "evidence" / "ci" / "ci.json"
             ci_receipt.parent.mkdir(parents=True, exist_ok=True)
             run_url = f"{MODULE.CANONICAL_REPOSITORY_URL}/actions/runs/123"
+            # receiptのheadは履歴記録でよく、inspected HEADと一致しなくてよい。
             ci_receipt.write_text(
                 json.dumps(
                     {
                         "schema": "space_civilization_ci_receipt.v1",
                         "repository": MODULE.CANONICAL_REPOSITORY,
-                        "head_sha": inspected_head,
+                        "head_sha": "c" * 40,
                         "conclusion": "success",
                         "jobs": {job: "success" for job in MODULE.REQUIRED_CI_JOBS},
                         "run_url": run_url,
@@ -659,7 +846,6 @@ class ProjectGoalContractTest(unittest.TestCase):
                     "repository": MODULE.CANONICAL_REPOSITORY,
                     "head_sha": "b" * 40,
                     "conclusion": "success",
-                    "run_url": run_url,
                     "jobs": {job: "success" for job in MODULE.REQUIRED_CI_JOBS},
                 },
             )
@@ -670,48 +856,54 @@ class ProjectGoalContractTest(unittest.TestCase):
             {item.get("reason") for item in report["findings"]},
         )
 
-    def test_ci_receipt_rejects_ancestor_of_inspected_exact_head(self) -> None:
+    def test_ci_live_readback_binds_inspected_head_not_receipt_sha(self) -> None:
+        """同一commit内receiptへinspected SHAを埋め込まなくても、liveがinspected HEADを証明すれば通る。"""
         ancestor = "a" * 40
         tip = "b" * 40
         with tempfile.TemporaryDirectory() as directory:
             tmp_path = Path(directory)
             self._copy_contract(tmp_path)
             self._activate_done_when(tmp_path, "CI-001")
-            run_url = self._write_ci_evidence(tmp_path, ancestor)
+            self._write_ci_evidence(tmp_path, ancestor)
 
             report = MODULE.build_report(
                 tmp_path,
                 head_resolver=lambda _: tip,
-                live_verifier=lambda _goal_id, _evidence: {
+                live_verifier=lambda _goal_id, evidence: {
                     "repository": MODULE.CANONICAL_REPOSITORY,
-                    "head_sha": ancestor,
+                    "head_sha": evidence["inspected_head"],
                     "conclusion": "success",
-                    "run_url": run_url,
-                    "jobs": {job: "success" for job in MODULE.REQUIRED_CI_JOBS},
-                },
-            )
-            self.assertFalse(report["contract_valid"])
-
-        with tempfile.TemporaryDirectory() as directory:
-            tmp_path = Path(directory)
-            self._copy_contract(tmp_path)
-            self._activate_done_when(tmp_path, "CI-001")
-            run_url = self._write_ci_evidence(tmp_path, tip)
-
-            report = MODULE.build_report(
-                tmp_path,
-                head_resolver=lambda _: tip,
-                live_verifier=lambda _goal_id, _evidence: {
-                    "repository": MODULE.CANONICAL_REPOSITORY,
-                    "head_sha": tip,
-                    "conclusion": "success",
-                    "run_url": run_url,
                     "jobs": {job: "success" for job in MODULE.REQUIRED_CI_JOBS},
                 },
             )
 
         self.assertTrue(report["contract_valid"], report["findings"])
         self.assertIn("CI-001", report["checked_done_when_ids"])
+
+    def test_ci_live_readback_rejects_success_for_other_head(self) -> None:
+        tip = "b" * 40
+        with tempfile.TemporaryDirectory() as directory:
+            tmp_path = Path(directory)
+            self._copy_contract(tmp_path)
+            self._activate_done_when(tmp_path, "CI-001")
+            self._write_ci_evidence(tmp_path, "a" * 40)
+
+            report = MODULE.build_report(
+                tmp_path,
+                head_resolver=lambda _: tip,
+                live_verifier=lambda _goal_id, _evidence: {
+                    "repository": MODULE.CANONICAL_REPOSITORY,
+                    "head_sha": "a" * 40,
+                    "conclusion": "success",
+                    "jobs": {job: "success" for job in MODULE.REQUIRED_CI_JOBS},
+                },
+            )
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "ci_live_readback_mismatch",
+            {item.get("reason") for item in report["findings"]},
+        )
 
     def test_required_ci_jobs_match_workflow_matrix_names(self) -> None:
         self.assertEqual(

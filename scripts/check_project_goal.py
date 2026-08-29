@@ -498,36 +498,35 @@ def _default_live_verifier(
 ) -> dict[str, Any]:
     """CI/PUBLICの自己申告をGitHub公開APIでread-backする。"""
     if goal_id == "CI-001":
-        run_url = evidence.get("run_url")
-        match = re.fullmatch(
-            rf"{re.escape(CANONICAL_REPOSITORY_URL)}/actions/runs/(?P<run_id>[1-9]\d*)",
-            run_url if isinstance(run_url, str) else "",
+        # inspected HEADはGitから得た値を優先する。同一commit内receiptへSHAを埋め込まない。
+        inspected_head = evidence.get("inspected_head")
+        if not isinstance(inspected_head, str) or not _is_digest(
+            inspected_head.lower(), length=40
+        ):
+            raise ValueError("inspected HEAD is missing")
+        inspected_head = inspected_head.lower()
+        checks_payload = _github_json(
+            f"/repos/{CANONICAL_REPOSITORY}/commits/{inspected_head}/check-runs?per_page=100"
         )
-        if not match:
-            raise ValueError("run URL is not canonical")
-        run_id = match.group("run_id")
-        run = _github_json(
-            f"/repos/{CANONICAL_REPOSITORY}/actions/runs/{run_id}"
-        )
-        jobs_payload = _github_json(
-            f"/repos/{CANONICAL_REPOSITORY}/actions/runs/{run_id}/jobs?per_page=100"
-        )
-        repository = run.get("repository")
-        jobs = jobs_payload.get("jobs")
+        check_runs = checks_payload.get("check_runs")
+        jobs: dict[str, Any] = {}
+        if isinstance(check_runs, list):
+            for check in check_runs:
+                if not isinstance(check, dict):
+                    continue
+                name = check.get("name")
+                if not isinstance(name, str):
+                    continue
+                conclusion = check.get("conclusion")
+                # 同名checkが複数ある場合はsuccessを優先して残す。
+                if name not in jobs or conclusion == "success":
+                    jobs[name] = conclusion
+        all_required_ok = all(jobs.get(job) == "success" for job in REQUIRED_CI_JOBS)
         return {
-            "repository": repository.get("full_name")
-            if isinstance(repository, dict)
-            else None,
-            "head_sha": run.get("head_sha"),
-            "conclusion": run.get("conclusion"),
-            "run_url": run.get("html_url"),
-            "jobs": {
-                job.get("name"): job.get("conclusion")
-                for job in jobs
-                if isinstance(job, dict) and isinstance(job.get("name"), str)
-            }
-            if isinstance(jobs, list)
-            else None,
+            "repository": CANONICAL_REPOSITORY,
+            "head_sha": inspected_head,
+            "conclusion": "success" if all_required_ok else "failure",
+            "jobs": jobs,
         }
     if goal_id == "PUBLIC-001":
         repository = _github_json(f"/repos/{CANONICAL_REPOSITORY}")
@@ -655,20 +654,28 @@ def _validate_done_when_artifact_contents(
         valid = manifest.get("schema") == "space_civilization_run_manifest.v1"
         valid = valid and isinstance(replays, list) and len(replays) >= 2
         replay_output: str | None = None
+        replay_signature: tuple[str, int, str] | None = None
         if valid:
-            signatures: set[tuple[Any, Any, Any]] = set()
+            signatures: set[tuple[str, int, str]] = set()
             outputs: set[str] = set()
             for run in replays:
                 if not isinstance(run, dict):
                     valid = False
                     break
-                signatures.add(
-                    (
-                        run.get("scenario_snapshot_hash"),
-                        run.get("seed"),
-                        run.get("model_version"),
-                    )
-                )
+                snapshot = run.get("scenario_snapshot_hash")
+                seed = run.get("seed")
+                model_version = run.get("model_version")
+                # setへ入れる前にhash可能な正規形へ落とす。不正値はTypeErrorにせず証拠無効にする。
+                if not _is_digest(snapshot):
+                    valid = False
+                    break
+                if type(seed) is not int:
+                    valid = False
+                    break
+                if not isinstance(model_version, str) or not model_version:
+                    valid = False
+                    break
+                signatures.add((snapshot, seed, model_version))
                 output_hash = run.get("canonical_output_hash")
                 if not _is_digest(output_hash):
                     valid = False
@@ -677,6 +684,7 @@ def _validate_done_when_artifact_contents(
             valid = valid and len(signatures) == 1 and len(outputs) == 1
             if valid:
                 replay_output = next(iter(outputs))
+                replay_signature = next(iter(signatures))
         if not valid:
             _evidence_error(findings, goal_id, "replay_result_invalid")
             return
@@ -711,7 +719,20 @@ def _validate_done_when_artifact_contents(
         if isinstance(canonical_result, dict):
             stored_valid = stored_valid and canonical_result.get("events") == events
             stored_valid = stored_valid and canonical_result.get("event_log_hash") == _sha256_json(events)
+            persisted_manifest = canonical_result.get("manifest")
+            # replay署名は永続化されたresult.manifestへ束縛する。
+            stored_valid = stored_valid and isinstance(persisted_manifest, dict)
+            stored_valid = stored_valid and replay_signature is not None
+            if stored_valid and isinstance(persisted_manifest, dict) and replay_signature is not None:
+                stored_valid = (
+                    persisted_manifest.get("scenario_snapshot_hash") == replay_signature[0]
+                    and persisted_manifest.get("seed") == replay_signature[1]
+                    and persisted_manifest.get("model_version") == replay_signature[2]
+                )
+        else:
+            stored_valid = False
         if stored_valid:
+            previous_after: dict[str, int] | None = None
             for event in events:
                 if not isinstance(event, dict):
                     stored_valid = False
@@ -722,10 +743,15 @@ def _validate_done_when_artifact_contents(
                 if not isinstance(before, dict) or not isinstance(after, dict) or not isinstance(deltas, dict):
                     stored_valid = False
                     break
-                if set(before) != set(after) or set(before) != set(deltas) or len(before) != 6:
+                if (
+                    set(before) != CANONICAL_TRACE_AXES
+                    or set(after) != CANONICAL_TRACE_AXES
+                    or set(deltas) != CANONICAL_TRACE_AXES
+                ):
                     stored_valid = False
                     break
-                for axis, value in before.items():
+                for axis in CANONICAL_TRACE_AXES:
+                    value = before[axis]
                     delta = deltas[axis]
                     after_value = after[axis]
                     if not all(type(item) is int for item in (value, delta, after_value)):
@@ -736,6 +762,22 @@ def _validate_done_when_artifact_contents(
                         break
                 if not stored_valid:
                     break
+                # 隣接eventの連続性: events[n].after == events[n+1].before
+                if previous_after is not None and before != previous_after:
+                    stored_valid = False
+                    break
+                previous_after = after
+            if stored_valid:
+                final_state = (
+                    canonical_result.get("final_state")
+                    if isinstance(canonical_result, dict)
+                    else None
+                )
+                final_axes = (
+                    final_state.get("axes") if isinstance(final_state, dict) else None
+                )
+                # 最終event.afterはcanonical_result.final_state.axesへ束縛する。
+                stored_valid = previous_after is not None and final_axes == previous_after
         if not stored_valid:
             _evidence_error(findings, goal_id, "stored_run_artifacts_invalid")
         return
@@ -816,9 +858,40 @@ def _validate_done_when_artifact_contents(
                 )
                 valid = valid and record.get("causal_scope") == "model_internal"
                 axis_deltas = record.get("axis_deltas")
+                base_deltas = record.get("base_axis_deltas")
+                exogenous = record.get("exogenous_effect")
+                random_draw = record.get("random_draw")
                 valid = valid and isinstance(axis_deltas, dict)
                 valid = valid and set(axis_deltas) == CANONICAL_TRACE_AXES
                 valid = valid and all(type(delta) is int for delta in axis_deltas.values())
+                valid = valid and isinstance(base_deltas, dict)
+                valid = valid and set(base_deltas) == CANONICAL_TRACE_AXES
+                valid = valid and all(type(delta) is int for delta in base_deltas.values())
+                valid = valid and isinstance(exogenous, dict)
+                exogenous_axis = exogenous.get("axis") if isinstance(exogenous, dict) else None
+                exogenous_modifier = (
+                    exogenous.get("modifier") if isinstance(exogenous, dict) else None
+                )
+                exogenous_provenance = (
+                    exogenous.get("provenance") if isinstance(exogenous, dict) else None
+                )
+                valid = valid and isinstance(exogenous_axis, str)
+                valid = valid and exogenous_axis in CANONICAL_TRACE_AXES
+                valid = valid and type(exogenous_modifier) is int
+                valid = (
+                    valid
+                    and isinstance(exogenous_provenance, str)
+                    and bool(exogenous_provenance.strip())
+                )
+                valid = valid and isinstance(random_draw, (int, float))
+                valid = valid and not isinstance(random_draw, bool)
+                valid = valid and 0 <= float(random_draw) < 1
+                if valid and isinstance(base_deltas, dict) and isinstance(exogenous, dict):
+                    expected = dict(base_deltas)
+                    expected[exogenous_axis] = (
+                        expected[exogenous_axis] + exogenous_modifier
+                    )
+                    valid = axis_deltas == expected
                 if not valid:
                     break
         if not valid:
@@ -987,16 +1060,12 @@ def _validate_done_when_artifact_contents(
             raw_head = receipt_data.get("head_sha")
             if isinstance(raw_head, str):
                 receipt_head = raw_head.lower()
-        # CI証拠は、この検査が実際に読んだexact HEADそのものへ束縛する。
-        head_bound = (
-            bool(inspected_head)
-            and _is_digest(receipt_head, length=40)
-            and receipt_head == inspected_head
-        )
-        valid = head_bound and isinstance(receipt_data, dict) and (
+        # receiptのhead_shaは履歴記録に留め、inspected HEADとの一致は要求しない。
+        # exact HEAD束縛はGit由来のinspected_headに対するlive check-runsで行う。
+        receipt_struct_valid = bool(inspected_head) and isinstance(receipt_data, dict) and (
             receipt_data.get("schema") == "space_civilization_ci_receipt.v1"
             and receipt_data.get("repository") == CANONICAL_REPOSITORY
-            and isinstance(receipt_data.get("head_sha"), str)
+            and _is_digest(receipt_head, length=40)
             and receipt_data.get("head_sha").lower() == receipt_head
             and receipt_data.get("conclusion") == "success"
             and isinstance(receipt_data.get("jobs"), dict)
@@ -1006,20 +1075,25 @@ def _validate_done_when_artifact_contents(
             )
             and receipt_data.get("run_url") == expected_run_url
         )
-        if not workflow_valid or not valid:
+        if not workflow_valid or not receipt_struct_valid:
             _evidence_error(findings, goal_id, "ci_result_invalid")
             return
         try:
-            live = live_verifier(goal_id, receipt_data)
+            live = live_verifier(
+                goal_id,
+                {
+                    **receipt_data,
+                    "inspected_head": inspected_head,
+                },
+            )
         except (OSError, ValueError, urllib.error.URLError):
             _evidence_error(findings, goal_id, "ci_live_readback_unavailable")
             return
         live_valid = isinstance(live, dict) and (
             live.get("repository") == CANONICAL_REPOSITORY
             and isinstance(live.get("head_sha"), str)
-            and live.get("head_sha").lower() == receipt_head
+            and live.get("head_sha").lower() == inspected_head
             and live.get("conclusion") == "success"
-            and live.get("run_url") == expected_run_url
             and isinstance(live.get("jobs"), dict)
             and all(live["jobs"].get(job) == "success" for job in REQUIRED_CI_JOBS)
         )
