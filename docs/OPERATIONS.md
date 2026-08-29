@@ -28,12 +28,16 @@ drift確認と回帰検査を通してから採用する。
 
 1. 対象差分だけをstageする。
 2. `git diff --cached --check`、secret scan、個人path scan、Markdown link検査を実行する。
-3. GitHubのdefault branchでは`secret-scan`、`goal-contract`、`ratchet (ubuntu-latest)`、
-   `ratchet (windows-latest)`をrequired status checkにする。現在はeligible reviewerがowner本人だけなので
+3. GitHubのdefault branchでは次のrequired status checkをenforced rulesetへ固定する。
+   `secret-scan`、`goal-contract (ubuntu-latest)`、`goal-contract (windows-latest)`、
+   `ratchet (ubuntu-latest)`、`ratchet (windows-latest)`、`ci-exact-head-verifier`。
+   現在はeligible reviewerがowner本人だけなので
    approving review／CODEOWNERS reviewを必須化しない。第二reviewer追加後に別reviewで昇格する。
    workflowとcheckerを同じPRで変更できても、required contextを削除してgreen扱いにはしない。
-   2026-08-25のPUBLIC read-backではactive main ruleset `21258820`があり、上記4 contextを
-   GitHub Actions app ID `15368`へ固定している。workflow内のjob名変更はruleset変更として扱う。
+   active main ruleset `21258820`はGitHub Actions app ID `15368`へ上記contextを固定する。
+   `ci-exact-head-verifier`はprerequisite jobs完了後にexact HEADを外側検証する。
+   rulesetへのcontext追加・削除はoperator gateであり、workflow内のjob名変更もruleset変更として扱う。
+   `check_project_goal.py`の`RULESET_REQUIRED_CHECKS`を文書と検査の正本とする。
 4. `ai-ratchet-gate`を通常モードで実行する。
 5. 差分と検査結果を人間が確認してからcommitする。
 
@@ -71,14 +75,19 @@ drift確認と回帰検査を通してから採用する。
 
 ## 現在の実測
 
-2026-08-25時点:
+2026-08-29時点:
 
 - repo: `nexus-ai-2045/space-civilization-choice`
 - remote main: `290d511b03329a89c9e1c78832a08578ed8b67d8`
 - visibility: `PUBLIC`
-- main CI: run `32686326484`でrequired 4 context成功
+- main CI: run `32686326484`で当時required 4 context成功
 - active main ruleset: `21258820`
-- required checks: `secret-scan`、`goal-contract`、`ratchet (ubuntu-latest)`、`ratchet (windows-latest)`
+- required checks（契約正本 `RULESET_REQUIRED_CHECKS`）:
+  `secret-scan`、`goal-contract (ubuntu-latest)`、`goal-contract (windows-latest)`、
+  `ratchet (ubuntu-latest)`、`ratchet (windows-latest)`、`ci-exact-head-verifier`
+- live ruleset read-back（2026-08-29）: まだ旧4 context
+  （`secret-scan`、`goal-contract`、`ratchet (ubuntu-latest)`、`ratchet (windows-latest)`）
+  のため、operatorによるruleset更新が残作業。CI-001完了には整合が必要
 - force pushとbranch deletion: 禁止
 - GitHub Ops probe: `status=ok`
 - remote owner、active login、credential usernameはrepo ownerと一致

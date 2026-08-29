@@ -1,0 +1,24 @@
+{
+  "schema": "space_civilization_done_when_evidence.v1",
+  "done_when_id": "REPLAY-001",
+  "evidence_type": "deterministic_replay",
+  "status": "passed",
+  "artifacts": {
+    "test": "tests/test_phase1_simulation.py",
+    "fixture": "fixtures/phase1_domestic_autonomy.json",
+    "run_manifest": "evidence/runs/phase1-replay.json",
+    "canonical_manifest": "evidence/runs/phase1-domestic-autonomy-20260828-v2/run-manifest.json",
+    "event_log": "evidence/runs/phase1-domestic-autonomy-20260828-v2/events.jsonl"
+  },
+  "artifact_sha256": {
+    "test": "9df15d0ecd400cb3d7235ee9090cec0f4f3d183b19accd23e79cb63412e28d11",
+    "fixture": "50547a9f08518322fd06de038d96f02c8b6b51104d61ae14520a606f31465684",
+    "run_manifest": "586b22905fe0ac5754fb4aed961138bb213219c1462265ce795e819110a173d7",
+    "canonical_manifest": "f9af93a6a09b575ec630724b018f0a6abe4cdb8eb08c8965a7a3626687c2f164",
+    "event_log": "e1bcedf5defce09a7a8591c29fbdb521c9289a0a950bb2e8ee71f907ab86e39e"
+  },
+  "result": {
+    "replay_count": 2,
+    "canonical_output_hash": "ee445d571bce80e7e1f3b0d890de80e67fafd4bc09d806131b08edf65f878dcc"
+  }
+}

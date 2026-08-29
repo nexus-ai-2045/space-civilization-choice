@@ -13,13 +13,17 @@ phase完了はプロダクトMVP完了、公開承認、merge承認を意味し�
 
 ## Phase 1: 決定論的fixture
 
-- 状態schema、3技術ツリー、5エージェント、4ラウンド
-- 追記型event log
+- branch-neutral状態schema、国内自立型fixture、5エージェント、4ラウンド
+- 上書き拒否するJSONL event log
 - 同一seedのreplay test
 
 完了条件: LLMなしで一分岐を再生でき、状態差分をturn IDへ遡れる。
 
-## Phase 2: 三分岐比較
+状態: **完了条件達成**。国内自立型の一分岐・4ラウンドfixture、上書き拒否するJSONL event log、同一入力の
+canonical hash一致、六軸deltaのmodel_internal traceまで実装済み。完了はMVP完成や公開承認を意味しない。
+branch-neutral schemaの固定とmodel card初版はPhase 2着手前に行う。
+
+## Phase 2: 残る二分岐と三分岐比較
 
 - 共通外生イベント列
 - 六観測軸と感度分析
