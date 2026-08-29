@@ -80,7 +80,7 @@ goal_id: space-civilization-choice-mvp-v1
 - [ ] `ROBUST-001`: XLRM、performance threshold、ensemble manifest、robustness／regret定義を固定し、脆弱性条件と選択肢喪失条件をholdoutで再確認できる
 - [ ] `FEEDBACK-001`: 各評価runにowner、判定、next action、resume condition、evidenceがある
 - [ ] `HUMAN-001`: 15〜25分の比較体験とモデル内因果の説明可能性を、人間レビュー記録で確認する
-- [x] `CI-001`: [receipt](evidence/done-when/CI-001.json) exact HEADでreplay、schema、trace、goal contract、security gateのCIが成功する
+- [ ] `CI-001`: exact HEADでreplay、schema、trace、goal contract、security gateのCIが成功する（GitHub rulesetを実行時SSOTとし、同一commit内receiptによる自己証明はしない）
 - [ ] `PUBLIC-001`: 公開前レビュー後に、README、license、SECURITY、secret／個人path scan、公開read-backを確認する
 
 ## 現在の達成状態

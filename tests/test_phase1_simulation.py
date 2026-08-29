@@ -39,6 +39,47 @@ def test_different_seed_changes_seeded_exogenous_stream_and_event_log():
     assert first["final_state"] != second["final_state"]
 
 
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("action", "qualify_redundant_component_supply"),
+        ("exogenous_event", "single_supplier_disruption"),
+        (
+            "axis_deltas",
+            {
+                axis: 0
+                for axis in (
+                    "access_and_operation",
+                    "industrial_reproduction",
+                    "rule_shaping",
+                    "knowledge_continuity",
+                    "relationship_choice",
+                    "public_legitimacy",
+                )
+            },
+        ),
+    ],
+)
+def test_scenario_snapshot_hash_binds_every_round_input(field, replacement):
+    first_fixture = load_fixture(FIXTURE)
+    second_fixture = load_fixture(FIXTURE)
+    second_fixture["rounds"][0][field] = replacement
+
+    first = run_simulation(first_fixture)
+    second = run_simulation(second_fixture)
+
+    assert first["manifest"]["scenario_snapshot_hash"] != second["manifest"]["scenario_snapshot_hash"]
+
+
+@pytest.mark.parametrize("branch", ["international_integration", "open_platform"])
+def test_phase1_rejects_branches_without_transition_rules(branch):
+    data = load_fixture(FIXTURE)
+    data["branch"] = branch
+
+    with pytest.raises(SimulationError, match="domestic_autonomy"):
+        run_simulation(data)
+
+
 def test_every_axis_delta_traces_to_a_turn_rule_and_evidence_model_internal():
     result = run_simulation(load_fixture(FIXTURE))
 
@@ -62,6 +103,20 @@ def test_every_axis_delta_traces_to_a_turn_rule_and_evidence_model_internal():
         assert trace["evidence_refs"] == [event["evidence_ref"]]
         assert trace["causal_scope"] == "model_internal"
         assert trace["axis_deltas"] == event["axis_deltas"]
+        assert trace["base_axis_deltas"] == event["base_axis_deltas"]
+        assert trace["exogenous_effect"] == event["exogenous_effect"]
+        assert trace["exogenous_effect"]["provenance"] == event["input"]["exogenous_event"]
+        assert trace["random_draw"] == event["random_draw"]
+
+
+def test_result_deep_copies_fixture_base_axis_deltas():
+    fixture = load_fixture(FIXTURE)
+    result = run_simulation(fixture)
+    recorded = result["events"][0]["base_axis_deltas"].copy()
+
+    fixture["rounds"][0]["axis_deltas"]["access_and_operation"] += 99
+
+    assert result["events"][0]["base_axis_deltas"] == recorded
 
 
 def test_fixture_rejects_missing_agent_or_invalid_rounds(tmp_path):

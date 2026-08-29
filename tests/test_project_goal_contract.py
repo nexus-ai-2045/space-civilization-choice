@@ -209,6 +209,26 @@ class ProjectGoalContractTest(unittest.TestCase):
         )
         return run_url
 
+    def _prepare_replay_evidence(self, repo: Path) -> tuple[Path, Path, Path]:
+        self._copy_contract(repo)
+        for relative in (
+            "tests/test_phase1_simulation.py",
+            "evidence/runs/phase1-replay.json",
+            "evidence/runs/phase1-domestic-autonomy-20260828-v2/run-manifest.json",
+            "evidence/runs/phase1-domestic-autonomy-20260828-v2/events.jsonl",
+            "evidence/done-when/REPLAY-001.json",
+        ):
+            source = ROOT / relative
+            target = repo / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(source.read_bytes())
+        self._activate_done_when(repo, "REPLAY-001")
+        return (
+            repo / "evidence/runs/phase1-domestic-autonomy-20260828-v2/run-manifest.json",
+            repo / "evidence/runs/phase1-domestic-autonomy-20260828-v2/events.jsonl",
+            repo / "evidence/done-when/REPLAY-001.json",
+        )
+
     def _write_human_evidence(self, repo: Path) -> None:
         review = repo / "evidence" / "reviews" / "review.json"
         review.parent.mkdir(parents=True, exist_ok=True)
@@ -265,34 +285,18 @@ class ProjectGoalContractTest(unittest.TestCase):
             },
         )
 
-    def test_repository_goal_contract_is_active_but_product_is_incomplete(self) -> None:
-        ci_receipt = json.loads(
-            (ROOT / "evidence/ci/phase1-exact-head-ecde21d.json").read_text(encoding="utf-8")
-        )
+    def test_repository_does_not_claim_stale_ci_receipt_for_current_head(self) -> None:
+        def unexpected_live_verifier(_goal_id, _evidence):
+            raise AssertionError("unchecked CI-001 must not read stale evidence")
 
-        def live_verifier(goal_id, evidence):
-            if goal_id != "CI-001":
-                raise AssertionError(f"unexpected live readback for {goal_id}")
-            self.assertEqual(evidence.get("head_sha"), ci_receipt["head_sha"])
-            return {
-                "repository": MODULE.CANONICAL_REPOSITORY,
-                "head_sha": ci_receipt["head_sha"],
-                "conclusion": "success",
-                "run_url": ci_receipt["run_url"],
-                "jobs": {job: "success" for job in MODULE.REQUIRED_CI_JOBS},
-            }
-
-        report = MODULE.build_report(ROOT, live_verifier=live_verifier)
+        report = MODULE.build_report(ROOT, live_verifier=unexpected_live_verifier)
 
         self.assertEqual(report["schema"], "space_civilization_project_goal_check.v3")
         self.assertTrue(report["contract_valid"], report["findings"])
         self.assertEqual(report["state"], "contract_valid_product_incomplete")
         self.assertEqual(report["goal_status"], "active")
         self.assertFalse(report["product_mvp_complete"])
-        self.assertEqual(
-            report["checked_done_when_ids"],
-            ["CI-001", "REPLAY-001", "TRACE-001"],
-        )
+        self.assertNotIn("CI-001", report["checked_done_when_ids"])
         self.assertFalse(report["external_actions_performed"])
 
     def test_replay_rejects_stored_hash_decoupled_from_replay_result(self) -> None:
@@ -349,6 +353,88 @@ class ProjectGoalContractTest(unittest.TestCase):
         self.assertIn(
             "invalid_done_when_evidence",
             {item["code"] for item in report["findings"]},
+        )
+
+    def test_replay_recomputes_hash_from_persisted_complete_result(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            tmp_path = Path(directory)
+            stored, event_log, receipt = self._prepare_replay_evidence(tmp_path)
+            events = [
+                json.loads(line)
+                for line in event_log.read_text(encoding="utf-8").splitlines()
+            ]
+            events[0]["action"] = "tampered-but-digests-copied"
+            event_log.write_text(
+                "".join(json.dumps(event, ensure_ascii=False) + "\n" for event in events),
+                encoding="utf-8",
+            )
+            payload = json.loads(stored.read_text(encoding="utf-8"))
+            payload["canonical_result"]["events"] = events
+            event_hash = MODULE._sha256_json(events)
+            payload["event_log_hash"] = event_hash
+            payload["canonical_result"]["event_log_hash"] = event_hash
+            stored.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            receipt_payload = json.loads(receipt.read_text(encoding="utf-8"))
+            receipt_payload["artifact_sha256"]["canonical_manifest"] = hashlib.sha256(
+                _canonical_text_bytes(stored)
+            ).hexdigest()
+            receipt_payload["artifact_sha256"]["event_log"] = hashlib.sha256(
+                _canonical_text_bytes(event_log)
+            ).hexdigest()
+            receipt.write_text(json.dumps(receipt_payload), encoding="utf-8")
+
+            report = MODULE.build_report(tmp_path)
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "stored_run_artifacts_invalid",
+            {item.get("reason") for item in report["findings"]},
+        )
+
+    def test_replay_rejects_nonnumeric_transition_with_structured_finding(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            tmp_path = Path(directory)
+            stored, event_log, receipt = self._prepare_replay_evidence(tmp_path)
+            events = [
+                json.loads(line)
+                for line in event_log.read_text(encoding="utf-8").splitlines()
+            ]
+            events[0]["before"]["access_and_operation"] = "40"
+            event_log.write_text(
+                "".join(json.dumps(event, ensure_ascii=False) + "\n" for event in events),
+                encoding="utf-8",
+            )
+            payload = json.loads(stored.read_text(encoding="utf-8"))
+            payload["canonical_result"]["events"] = events
+            event_hash = MODULE._sha256_json(events)
+            payload["event_log_hash"] = event_hash
+            payload["canonical_result"]["event_log_hash"] = event_hash
+            computed = MODULE._sha256_json(payload["canonical_result"])
+            payload["canonical_output_hash"] = computed
+            stored.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            replay = tmp_path / "evidence/runs/phase1-replay.json"
+            replay_payload = json.loads(replay.read_text(encoding="utf-8"))
+            for run in replay_payload["replays"]:
+                run["canonical_output_hash"] = computed
+            replay.write_text(json.dumps(replay_payload), encoding="utf-8")
+            receipt_payload = json.loads(receipt.read_text(encoding="utf-8"))
+            receipt_payload["result"]["canonical_output_hash"] = computed
+            for role, path in {
+                "run_manifest": replay,
+                "canonical_manifest": stored,
+                "event_log": event_log,
+            }.items():
+                receipt_payload["artifact_sha256"][role] = hashlib.sha256(
+                    _canonical_text_bytes(path)
+                ).hexdigest()
+            receipt.write_text(json.dumps(receipt_payload), encoding="utf-8")
+
+            report = MODULE.build_report(tmp_path)
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "stored_run_artifacts_invalid",
+            {item.get("reason") for item in report["findings"]},
         )
 
     def test_trace_rejects_noncanonical_axes_even_when_six_are_present(self) -> None:
@@ -584,7 +670,7 @@ class ProjectGoalContractTest(unittest.TestCase):
             {item.get("reason") for item in report["findings"]},
         )
 
-    def test_ci_receipt_may_bind_to_ancestor_exact_head(self) -> None:
+    def test_ci_receipt_rejects_ancestor_of_inspected_exact_head(self) -> None:
         ancestor = "a" * 40
         tip = "b" * 40
         with tempfile.TemporaryDirectory() as directory:
@@ -604,7 +690,6 @@ class ProjectGoalContractTest(unittest.TestCase):
                     "jobs": {job: "success" for job in MODULE.REQUIRED_CI_JOBS},
                 },
             )
-            # TemporaryDirectory is not a git repo; ancestor check fails closed.
             self.assertFalse(report["contract_valid"])
 
         with tempfile.TemporaryDirectory() as directory:
@@ -627,6 +712,18 @@ class ProjectGoalContractTest(unittest.TestCase):
 
         self.assertTrue(report["contract_valid"], report["findings"])
         self.assertIn("CI-001", report["checked_done_when_ids"])
+
+    def test_required_ci_jobs_match_workflow_matrix_names(self) -> None:
+        self.assertEqual(
+            MODULE.REQUIRED_CI_JOBS,
+            (
+                "secret-scan",
+                "goal-contract (ubuntu-latest)",
+                "goal-contract (windows-latest)",
+                "ratchet (ubuntu-latest)",
+                "ratchet (windows-latest)",
+            ),
+        )
 
     def test_public_requires_validated_ci_and_human_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

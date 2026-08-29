@@ -42,8 +42,9 @@ GOAL_STATUSES = {"design", "active", "complete"}
 CANONICAL_REPOSITORY = "nexus-ai-2045/space-civilization-choice"
 CANONICAL_REPOSITORY_URL = f"https://github.com/{CANONICAL_REPOSITORY}"
 REQUIRED_CI_JOBS = (
-    "goal-contract",
     "secret-scan",
+    "goal-contract (ubuntu-latest)",
+    "goal-contract (windows-latest)",
     "ratchet (ubuntu-latest)",
     "ratchet (windows-latest)",
 )
@@ -377,6 +378,14 @@ def _is_digest(value: Any, length: int = 64) -> bool:
     )
 
 
+def _sha256_json(value: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+    ).hexdigest()
+
+
 def _positive_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
@@ -690,12 +699,18 @@ def _validate_done_when_artifact_contents(
         stored_valid = isinstance(stored, dict)
         stored_valid = stored_valid and stored.get("schema") == "space_civilization_stored_run.v1"
         stored_valid = stored_valid and stored.get("event_count") == len(events) and len(events) > 0
-        stored_valid = stored_valid and stored.get("event_log_hash") == hashlib.sha256(
-            json.dumps(events, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        ).hexdigest()
-        # 運用保証: replay / stored manifest / receipt result の三箇所が同一hashであること。
-        stored_valid = stored_valid and stored.get("canonical_output_hash") == replay_output
-        stored_valid = stored_valid and receipt_hash == replay_output
+        stored_valid = stored_valid and stored.get("event_log_hash") == _sha256_json(events)
+        canonical_result = stored.get("canonical_result") if isinstance(stored, dict) else None
+        computed_output_hash = (
+            _sha256_json(canonical_result) if isinstance(canonical_result, dict) else None
+        )
+        # copied digest同士の一致ではなく、永続化された完全resultから再計算する。
+        stored_valid = stored_valid and computed_output_hash == replay_output
+        stored_valid = stored_valid and stored.get("canonical_output_hash") == computed_output_hash
+        stored_valid = stored_valid and receipt_hash == computed_output_hash
+        if isinstance(canonical_result, dict):
+            stored_valid = stored_valid and canonical_result.get("events") == events
+            stored_valid = stored_valid and canonical_result.get("event_log_hash") == _sha256_json(events)
         if stored_valid:
             for event in events:
                 if not isinstance(event, dict):
@@ -711,7 +726,12 @@ def _validate_done_when_artifact_contents(
                     stored_valid = False
                     break
                 for axis, value in before.items():
-                    if value + deltas[axis] != after[axis]:
+                    delta = deltas[axis]
+                    after_value = after[axis]
+                    if not all(type(item) is int for item in (value, delta, after_value)):
+                        stored_valid = False
+                        break
+                    if value + delta != after_value:
                         stored_valid = False
                         break
                 if not stored_valid:
@@ -967,15 +987,12 @@ def _validate_done_when_artifact_contents(
             raw_head = receipt_data.get("head_sha")
             if isinstance(raw_head, str):
                 receipt_head = raw_head.lower()
-        # 記録する exact HEAD の CI 成功を live で検証する。
-        # 証拠を追加した後続 commit でも、記録 HEAD が現 HEAD の祖先なら受理する
-        # （証拠 commit 自身の SHA を事前埋め込みできない鶏卵を避ける）。
-        head_bound = bool(inspected_head) and _is_digest(receipt_head, length=40)
-        if head_bound and receipt_head != inspected_head:
-            try:
-                head_bound = _git_is_ancestor(repo, receipt_head, inspected_head)
-            except (OSError, subprocess.SubprocessError, ValueError):
-                head_bound = False
+        # CI証拠は、この検査が実際に読んだexact HEADそのものへ束縛する。
+        head_bound = (
+            bool(inspected_head)
+            and _is_digest(receipt_head, length=40)
+            and receipt_head == inspected_head
+        )
         valid = head_bound and isinstance(receipt_data, dict) and (
             receipt_data.get("schema") == "space_civilization_ci_receipt.v1"
             and receipt_data.get("repository") == CANONICAL_REPOSITORY

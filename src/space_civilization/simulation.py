@@ -76,8 +76,8 @@ def validate_fixture(data: dict[str, Any]) -> None:
     missing = sorted(required - data.keys())
     if missing:
         raise SimulationError(f"fixture required fields missing: {missing}")
-    if data["branch"] not in {"international_integration", "domestic_autonomy", "open_platform"}:
-        raise SimulationError("unknown technology branch")
+    if data["branch"] != "domestic_autonomy":
+        raise SimulationError("Phase 1 only has transition rules for domestic_autonomy")
     if not _is_int(data["seed"]):
         raise SimulationError("seed must be an integer")
     if [item.get("year") for item in data["rounds"]] != list(ROUNDS):
@@ -141,7 +141,10 @@ def build_model_internal_trace(events: list[dict[str, Any]]) -> list[dict[str, A
                 "model_rule": event["rule_id"],
                 "evidence_refs": [event["evidence_ref"]],
                 "causal_scope": "model_internal",
+                "base_axis_deltas": deepcopy(event["base_axis_deltas"]),
                 "axis_deltas": deepcopy(event["axis_deltas"]),
+                "exogenous_effect": deepcopy(event["exogenous_effect"]),
+                "random_draw": event["random_draw"],
             }
         )
     return records
@@ -149,12 +152,8 @@ def build_model_internal_trace(events: list[dict[str, Any]]) -> list[dict[str, A
 
 def run_simulation(fixture: dict[str, Any]) -> dict[str, Any]:
     validate_fixture(fixture)
-    snapshot = {
-        "scenario_snapshot_id": fixture["scenario_snapshot_id"],
-        "model_version": fixture["model_version"],
-        "initial_state": fixture["initial_state"],
-    }
-    scenario_snapshot_hash = sha256_json(snapshot)
+    # シミュレーションを決定するfixture全体をsnapshotとして束縛する。
+    scenario_snapshot_hash = sha256_json(fixture)
     exogenous_event_stream = [
         {
             "year": item["year"],
@@ -178,6 +177,7 @@ def run_simulation(fixture: dict[str, Any]) -> dict[str, Any]:
         exogenous_effect = _realize_exogenous_effect(
             item["exogenous_event"], exogenous_event_stream[turn_id - 1]["random_draw"]
         )
+        exogenous_effect["provenance"] = item["exogenous_event"]
         effective_deltas = deepcopy(item["axis_deltas"])
         effective_deltas[exogenous_effect["axis"]] += exogenous_effect["modifier"]
         after = _apply_deltas(before, effective_deltas)
@@ -191,7 +191,7 @@ def run_simulation(fixture: dict[str, Any]) -> dict[str, Any]:
                 "action": item["action"],
                 "before": before,
                 "after": after,
-                "base_axis_deltas": item["axis_deltas"],
+                "base_axis_deltas": deepcopy(item["axis_deltas"]),
                 "axis_deltas": effective_deltas,
                 "exogenous_effect": exogenous_effect,
                 "rule_id": item["rule_id"],

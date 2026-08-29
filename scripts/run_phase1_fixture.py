@@ -25,12 +25,17 @@ def main() -> int:
         if args.output_dir.exists():
             raise FileExistsError(f"run output already exists: {args.output_dir}")
         args.output_dir.parent.mkdir(parents=True, exist_ok=True)
+        canonical_result = {
+            key: result[key]
+            for key in ("manifest", "final_state", "events", "event_log_hash")
+        }
         stored_manifest = {
             "schema": "space_civilization_stored_run.v1",
             **result["manifest"],
             "event_count": len(result["events"]),
             "event_log_hash": result["event_log_hash"],
             "canonical_output_hash": result["canonical_output_hash"],
+            "canonical_result": canonical_result,
         }
         with tempfile.TemporaryDirectory(prefix=".phase1-run-", dir=args.output_dir.parent) as temp_dir:
             temp_path = Path(temp_dir)

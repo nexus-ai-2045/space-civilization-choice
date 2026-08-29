@@ -10,13 +10,13 @@
     "event_log": "evidence/runs/phase1-domestic-autonomy-20260828-v2/events.jsonl"
   },
   "artifact_sha256": {
-    "test": "d892626a753314f536c22f142bec561192d5daa3adf411716bd6a211af6d48eb",
-    "run_manifest": "d411b9876c92d6438c8a97e6661eacb4e56dabb90f8911e338651b3f7afd8e7b",
-    "canonical_manifest": "d68f45b294ddafffd4ba1383633df9444514e47543f5cb4085373323fff7aa0a",
-    "event_log": "4c8a3adcc5f68cb82807530c1af25626493c857b5d11fac6be915153ae5eed12"
+    "test": "15c9b85875e7b43fac4ae9543a0ad4d8f9700695d4647342a089b10a641a620e",
+    "run_manifest": "e415a93cb48a405811eaac6b5fcbd27c343890e4f8bc572795dddc45312d71a9",
+    "canonical_manifest": "a9628d19d569a8381ceda890abbcc687d72009f3da5f4dcc322e9a161902e067",
+    "event_log": "e1bcedf5defce09a7a8591c29fbdb521c9289a0a950bb2e8ee71f907ab86e39e"
   },
   "result": {
     "replay_count": 2,
-    "canonical_output_hash": "61a5dcdcd2d6777e4decd0787340563f42b43fee67163363c4f8c1be0f0f7fa2"
+    "canonical_output_hash": "b7499a3937b7ac7deaef2e9672ecc137fe3d74f8d984b4974c478e4b0df194b1"
   }
 }

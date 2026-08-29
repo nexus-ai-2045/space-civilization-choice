@@ -8,8 +8,8 @@
     "trace": "evidence/runs/phase1-domestic-autonomy-20260828-v2/trace.jsonl"
   },
   "artifact_sha256": {
-    "test": "d892626a753314f536c22f142bec561192d5daa3adf411716bd6a211af6d48eb",
-    "trace": "07e0390cf37ebe81a5ae610887fc60e59cf4743741e3c41c0d61134618c3e4a7"
+    "test": "15c9b85875e7b43fac4ae9543a0ad4d8f9700695d4647342a089b10a641a620e",
+    "trace": "c4d47f3b8469e3beb2534ab41cd7c2b9ed151e8748d196e73b9971ff4bf80758"
   },
   "result": {
     "record_count": 4,
