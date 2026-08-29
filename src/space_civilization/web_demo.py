@@ -155,6 +155,10 @@ def _trace_rows(
         identity = ""
         if record["kind"] == "action":
             identity = f' agent={record["agent_id"]} action={record["action_id"]}'
+        elif record["kind"] == "uncertainty":
+            identity = (
+                f' parameter={record["parameter_id"]} rule={record["rule_id"]}'
+            )
         else:
             identity = f' rule={record["rule_id"]}'
         rows.append(
@@ -162,12 +166,17 @@ def _trace_rows(
             f'attempted={record["attempted_delta"]:+d} '
             f'applied={record["applied_delta"]:+d}'
         )
-    rows.extend(
-        f'SATURATION year={year} rule={event["rule_id"]} axis={event["axis"]} '
-        f'attempted={event["attempted_delta"]:+d} '
-        f'applied={event["applied_delta"]:+d}'
-        for event in saturations
-    )
+    for event in saturations:
+        parameter = (
+            f' parameter={event["parameter_id"]}'
+            if "parameter_id" in event
+            else ""
+        )
+        rows.append(
+            f'SATURATION year={year} rule={event["rule_id"]}{parameter} '
+            f'axis={event["axis"]} attempted={event["attempted_delta"]:+d} '
+            f'applied={event["applied_delta"]:+d}'
+        )
     return rows
 
 

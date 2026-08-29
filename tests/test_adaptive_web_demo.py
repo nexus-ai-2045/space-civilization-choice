@@ -226,6 +226,23 @@ def test_execution_records_include_unsaturated_feedback_and_reconcile_after_stat
     assert feedback_count == 4
 
 
+def test_uncertainty_trace_projects_parameter_identity_for_every_record():
+    result = build_adaptive_demo(expand_preset("balanced"), seed=9)
+    for view in result["rounds"]:
+        records = [
+            record for record in view["execution_records"]
+            if record["kind"] == "uncertainty"
+        ]
+        assert len(records) == 3
+        for record in records:
+            assert any(
+                row.startswith("UNCERTAINTY ")
+                and f'parameter={record["parameter_id"]}' in row
+                and f'rule={record["rule_id"]}' in row
+                for row in view["trace"]
+            )
+
+
 def test_constellation_scene_destroys_children_on_redraw():
     source = (web_demo.REPO_ROOT / "frontend/src/ConstellationScene.ts").read_text(encoding="utf-8")
     assert "killAll()" in source

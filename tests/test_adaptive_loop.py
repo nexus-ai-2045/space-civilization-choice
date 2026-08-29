@@ -75,6 +75,53 @@ def test_execution_records_are_emitted_at_transition_point_and_reconcile_after()
         assert cursor == round_item["after"]
 
 
+def test_execution_record_contract_covers_uncertainty_identity_and_all_clamps():
+    parameters = expand_preset("balanced")
+    allocation_ids = (
+        "transport", "autonomy", "life_support", "energy", "domestic_supply",
+        "people_research", "international_connection", "open_platform",
+    )
+    for key in allocation_ids:
+        parameters[key] = 0
+    parameters["domestic_supply"] = 100
+    parameters.update(
+        {
+            "technology_readiness": 0,
+            "industrial_capacity": 0,
+            "domestic_procurement": 100,
+            "dependency_tolerance": 0,
+            "launch_cost_pressure": 100,
+            "supply_disruption": 100,
+            "international_friction": 100,
+        }
+    )
+    result = run_adaptive_simulation(parameters, seed=4)
+    clamped_uncertainty_seen = False
+    for round_item in result["rounds"]:
+        uncertainty_records = [
+            record for record in round_item["execution_records"]
+            if record["kind"] == "uncertainty"
+        ]
+        assert {record["parameter_id"] for record in uncertainty_records} == {
+            "launch_cost_pressure", "supply_disruption", "international_friction"
+        }
+        for record in round_item["execution_records"]:
+            if record["attempted_delta"] == record["applied_delta"]:
+                continue
+            matches = [
+                diagnostic for diagnostic in round_item["transition_saturations"]
+                if diagnostic["execution_kind"] == record["kind"]
+                and diagnostic["axis"] == record["axis"]
+                and diagnostic["attempted_delta"] == record["attempted_delta"]
+                and diagnostic["applied_delta"] == record["applied_delta"]
+            ]
+            assert matches
+            if record["kind"] == "uncertainty":
+                assert matches[0]["parameter_id"] == record["parameter_id"]
+                clamped_uncertainty_seen = True
+    assert clamped_uncertainty_seen
+
+
 def test_all_valid_parameter_boundaries_complete_with_explicit_saturation():
     allocation_ids = {
         "transport",

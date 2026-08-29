@@ -87,7 +87,17 @@ def _apply_actions(
                 }
             )
             if saturated:
-                saturations.append({"rule_id": "BOUND-ACTION", "axis": axis, "attempted_delta": delta, "applied_delta": result[axis] - before})
+                saturations.append(
+                    {
+                        "rule_id": "BOUND-ACTION",
+                        "execution_kind": "action",
+                        "agent_id": item["agent_id"],
+                        "action_id": item["action_id"],
+                        "axis": axis,
+                        "attempted_delta": delta,
+                        "applied_delta": result[axis] - before,
+                    }
+                )
     # Close the three-phase loop: visible outcomes feed legitimacy in every round.
     physical_signal = result["access_and_operation"] - axes["access_and_operation"]
     organizational_signal = result["industrial_reproduction"] - axes["industrial_reproduction"]
@@ -105,7 +115,15 @@ def _apply_actions(
         }
     )
     if saturated:
-        saturations.append({"rule_id": "BOUND-FEEDBACK", "axis": "public_legitimacy", "attempted_delta": attempted_delta, "applied_delta": result["public_legitimacy"] - before_legitimacy})
+        saturations.append(
+            {
+                "rule_id": "BOUND-FEEDBACK",
+                "execution_kind": "feedback",
+                "axis": "public_legitimacy",
+                "attempted_delta": attempted_delta,
+                "applied_delta": result["public_legitimacy"] - before_legitimacy,
+            }
+        )
     return result, saturations, records
 
 
@@ -121,6 +139,7 @@ def _apply_uncertainty(
     )
     events = []
     records = []
+    saturations = []
     round_index = ROUNDS.index(year) + 1
     for parameter_id, axis, rule_id in rules:
         severity = parameters[parameter_id]
@@ -132,13 +151,26 @@ def _apply_uncertainty(
             {
                 "kind": "uncertainty",
                 "year": year,
+                "parameter_id": parameter_id,
                 "rule_id": rule_id,
                 "axis": axis,
                 "attempted_delta": delta,
                 "applied_delta": result[axis] - before,
             }
         )
-    return result, events, records
+        if saturated:
+            saturations.append(
+                {
+                    "rule_id": "BOUND-UNCERTAINTY",
+                    "source_rule_id": rule_id,
+                    "execution_kind": "uncertainty",
+                    "parameter_id": parameter_id,
+                    "axis": axis,
+                    "attempted_delta": delta,
+                    "applied_delta": result[axis] - before,
+                }
+            )
+    return result, events, records, saturations
 
 
 def run_adaptive_simulation(
@@ -220,9 +252,13 @@ def run_adaptive_simulation(
         axes, transition_saturations, action_records = _apply_actions(
             axes, accepted, year
         )
-        axes, uncertainty_events, uncertainty_records = _apply_uncertainty(
-            axes, checked, year
-        )
+        (
+            axes,
+            uncertainty_events,
+            uncertainty_records,
+            uncertainty_saturations,
+        ) = _apply_uncertainty(axes, checked, year)
+        transition_saturations.extend(uncertainty_saturations)
         execution_records = action_records + uncertainty_records
         item = {
             "year": year, "pdca": ["plan", "do", "check", "act"], "before": before,
