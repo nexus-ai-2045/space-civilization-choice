@@ -1,11 +1,269 @@
 {
   "branch_id": "domestic_autonomy",
-  "canonical_output_hash": "61a5dcdcd2d6777e4decd0787340563f42b43fee67163363c4f8c1be0f0f7fa2",
+  "canonical_output_hash": "ee445d571bce80e7e1f3b0d890de80e67fafd4bc09d806131b08edf65f878dcc",
+  "canonical_result": {
+    "event_log_hash": "3dae2978548543716b8c3bd35044381fe51c92f06f797f53418e08521f3bb130",
+    "events": [
+      {
+        "action": "allocate_to_domestic_core_components",
+        "actor": "policy_allocator",
+        "after": {
+          "access_and_operation": 38,
+          "industrial_reproduction": 43,
+          "knowledge_continuity": 49,
+          "public_legitimacy": 52,
+          "relationship_choice": 37,
+          "rule_shaping": 31
+        },
+        "axis_deltas": {
+          "access_and_operation": -2,
+          "industrial_reproduction": 8,
+          "knowledge_continuity": 4,
+          "public_legitimacy": 2,
+          "relationship_choice": -3,
+          "rule_shaping": 1
+        },
+        "base_axis_deltas": {
+          "access_and_operation": -2,
+          "industrial_reproduction": 8,
+          "knowledge_continuity": 4,
+          "public_legitimacy": 1,
+          "relationship_choice": -3,
+          "rule_shaping": 1
+        },
+        "before": {
+          "access_and_operation": 40,
+          "industrial_reproduction": 35,
+          "knowledge_continuity": 45,
+          "public_legitimacy": 50,
+          "relationship_choice": 40,
+          "rule_shaping": 30
+        },
+        "epistemic_class": "model_assumption",
+        "evidence_ref": "model-assumption:phase1-domestic-allocation",
+        "exogenous_effect": {
+          "axis": "public_legitimacy",
+          "modifier": 1,
+          "provenance": "budget_focus_required"
+        },
+        "input": {
+          "branch": "domestic_autonomy",
+          "exogenous_event": "budget_focus_required"
+        },
+        "provenance_type": "deterministic_core",
+        "random_draw": 0.8060476863891415,
+        "record_kind": "simulated_transition",
+        "rule_id": "R-DOM-01",
+        "turn_id": 1,
+        "validation_state": "accepted_for_run",
+        "year": 2026
+      },
+      {
+        "action": "qualify_redundant_component_supply",
+        "actor": "transport_and_components_alliance",
+        "after": {
+          "access_and_operation": 42,
+          "industrial_reproduction": 50,
+          "knowledge_continuity": 51,
+          "public_legitimacy": 53,
+          "relationship_choice": 38,
+          "rule_shaping": 31
+        },
+        "axis_deltas": {
+          "access_and_operation": 4,
+          "industrial_reproduction": 7,
+          "knowledge_continuity": 2,
+          "public_legitimacy": 1,
+          "relationship_choice": 1,
+          "rule_shaping": 0
+        },
+        "base_axis_deltas": {
+          "access_and_operation": 3,
+          "industrial_reproduction": 7,
+          "knowledge_continuity": 2,
+          "public_legitimacy": 1,
+          "relationship_choice": 1,
+          "rule_shaping": 0
+        },
+        "before": {
+          "access_and_operation": 38,
+          "industrial_reproduction": 43,
+          "knowledge_continuity": 49,
+          "public_legitimacy": 52,
+          "relationship_choice": 37,
+          "rule_shaping": 31
+        },
+        "epistemic_class": "model_assumption",
+        "evidence_ref": "model-assumption:phase1-redundancy",
+        "exogenous_effect": {
+          "axis": "access_and_operation",
+          "modifier": 1,
+          "provenance": "single_supplier_disruption"
+        },
+        "input": {
+          "branch": "domestic_autonomy",
+          "exogenous_event": "single_supplier_disruption"
+        },
+        "provenance_type": "deterministic_core",
+        "random_draw": 0.7650036816673829,
+        "record_kind": "simulated_transition",
+        "rule_id": "R-DOM-02",
+        "turn_id": 2,
+        "validation_state": "accepted_for_run",
+        "year": 2030
+      },
+      {
+        "action": "expand_maintainer_training",
+        "actor": "research_and_next_generation_alliance",
+        "after": {
+          "access_and_operation": 44,
+          "industrial_reproduction": 53,
+          "knowledge_continuity": 59,
+          "public_legitimacy": 55,
+          "relationship_choice": 38,
+          "rule_shaping": 32
+        },
+        "axis_deltas": {
+          "access_and_operation": 2,
+          "industrial_reproduction": 3,
+          "knowledge_continuity": 8,
+          "public_legitimacy": 2,
+          "relationship_choice": 0,
+          "rule_shaping": 1
+        },
+        "base_axis_deltas": {
+          "access_and_operation": 2,
+          "industrial_reproduction": 3,
+          "knowledge_continuity": 8,
+          "public_legitimacy": 2,
+          "relationship_choice": 0,
+          "rule_shaping": 1
+        },
+        "before": {
+          "access_and_operation": 42,
+          "industrial_reproduction": 50,
+          "knowledge_continuity": 51,
+          "public_legitimacy": 53,
+          "relationship_choice": 38,
+          "rule_shaping": 31
+        },
+        "epistemic_class": "model_assumption",
+        "evidence_ref": "model-assumption:phase1-skills",
+        "exogenous_effect": {
+          "axis": "knowledge_continuity",
+          "modifier": 0,
+          "provenance": "experienced_workforce_retirement"
+        },
+        "input": {
+          "branch": "domestic_autonomy",
+          "exogenous_event": "experienced_workforce_retirement"
+        },
+        "provenance_type": "deterministic_core",
+        "random_draw": 0.42843340907228933,
+        "record_kind": "simulated_transition",
+        "rule_id": "R-DOM-03",
+        "turn_id": 3,
+        "validation_state": "accepted_for_run",
+        "year": 2035
+      },
+      {
+        "action": "operate_with_domestic_maintenance_chain",
+        "actor": "domestic_exploration_alliance",
+        "after": {
+          "access_and_operation": 48,
+          "industrial_reproduction": 57,
+          "knowledge_continuity": 62,
+          "public_legitimacy": 56,
+          "relationship_choice": 36,
+          "rule_shaping": 31
+        },
+        "axis_deltas": {
+          "access_and_operation": 4,
+          "industrial_reproduction": 4,
+          "knowledge_continuity": 3,
+          "public_legitimacy": 1,
+          "relationship_choice": -2,
+          "rule_shaping": -1
+        },
+        "base_axis_deltas": {
+          "access_and_operation": 4,
+          "industrial_reproduction": 4,
+          "knowledge_continuity": 3,
+          "public_legitimacy": 1,
+          "relationship_choice": -2,
+          "rule_shaping": -1
+        },
+        "before": {
+          "access_and_operation": 44,
+          "industrial_reproduction": 53,
+          "knowledge_continuity": 59,
+          "public_legitimacy": 55,
+          "relationship_choice": 38,
+          "rule_shaping": 32
+        },
+        "epistemic_class": "model_assumption",
+        "evidence_ref": "model-assumption:phase1-operational-choice",
+        "exogenous_effect": {
+          "axis": "relationship_choice",
+          "modifier": 0,
+          "provenance": "international_interface_revision"
+        },
+        "input": {
+          "branch": "domestic_autonomy",
+          "exogenous_event": "international_interface_revision"
+        },
+        "provenance_type": "deterministic_core",
+        "random_draw": 0.36548079808756045,
+        "record_kind": "simulated_transition",
+        "rule_id": "R-DOM-04",
+        "turn_id": 4,
+        "validation_state": "accepted_for_run",
+        "year": 2040
+      }
+    ],
+    "final_state": {
+      "agents": {
+        "domestic_exploration_alliance": {
+          "capacity": 45
+        },
+        "international_partners": {
+          "capacity": 55
+        },
+        "policy_allocator": {
+          "capacity": 50
+        },
+        "research_and_next_generation_alliance": {
+          "capacity": 40
+        },
+        "transport_and_components_alliance": {
+          "capacity": 35
+        }
+      },
+      "axes": {
+        "access_and_operation": 48,
+        "industrial_reproduction": 57,
+        "knowledge_continuity": 62,
+        "public_legitimacy": 56,
+        "relationship_choice": 36,
+        "rule_shaping": 31
+      }
+    },
+    "manifest": {
+      "branch_id": "domestic_autonomy",
+      "deterministic_execution_input_hash": "adb81b189dfa4bc5806b1982871641ebc0844a1e0ce26ea91e9bfa1b40baa4ac",
+      "exogenous_event_stream_hash": "c64554c05e01ccf8528084aae0d968f6cab8dcde08e4666a6abc262d868bf485",
+      "model_version": "phase1-rule-model-v1",
+      "scenario_snapshot_hash": "324182e2a85978a261bf865a58b24c7a6de88e8b572c863c1aa3371f5b030724",
+      "scenario_snapshot_id": "jp-space-choice-2026-phase1-v1",
+      "seed": 20260828
+    }
+  },
+  "deterministic_execution_input_hash": "adb81b189dfa4bc5806b1982871641ebc0844a1e0ce26ea91e9bfa1b40baa4ac",
   "event_count": 4,
-  "event_log_hash": "dfb9e0be0f6b76ccaca734ad43854b4cb4a08cc8080b739f95c909c3189b5c10",
+  "event_log_hash": "3dae2978548543716b8c3bd35044381fe51c92f06f797f53418e08521f3bb130",
   "exogenous_event_stream_hash": "c64554c05e01ccf8528084aae0d968f6cab8dcde08e4666a6abc262d868bf485",
   "model_version": "phase1-rule-model-v1",
-  "scenario_snapshot_hash": "2d4e6ba483034e3f213f61893ee1566cfb399c176126000c7edae55f30aab8f9",
+  "scenario_snapshot_hash": "324182e2a85978a261bf865a58b24c7a6de88e8b572c863c1aa3371f5b030724",
   "scenario_snapshot_id": "jp-space-choice-2026-phase1-v1",
   "schema": "space_civilization_stored_run.v1",
   "seed": 20260828

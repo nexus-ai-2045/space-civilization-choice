@@ -142,7 +142,7 @@ canonical output hash一致と六軸deltaのmodel_internal traceまで実装し�
 ゴール契約、決定論コア、適応型PDCA、ローカルWebデモを検査・実行できます。
 
 ```powershell
-$env:PYTHONPATH = 'src'
+py -3.13 -m pip install --disable-pip-version-check -r requirements-dev.txt
 py -3.13 -m pytest -q
 py -3.13 scripts/check_project_goal.py --json
 py -3.13 scripts/run_phase1_fixture.py

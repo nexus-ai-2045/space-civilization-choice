@@ -27,22 +27,14 @@ goal_id: space-civilization-choice-mvp-v1
 地球上の資金、知財、人材、標準の選択が、宇宙での到達・運用・統治条件へ波及し、その結果が
 日本の産業、同盟、社会的正統性へ戻る一本の因果連鎖を観測する。
 
-ハッカソンMVPでは、二つの出発領域を**宇宙 × 認知・文化**に固定する。日本社会が宇宙進出へ
-与える意味、期待、不安が、人材・予算・企業投資を通じて物理的な宇宙能力を変え、その成功、
-依存、事故が再び社会の認識と支持を変える循環を、AIエージェント間の相互作用として観測する。
-固定された方針名を選ぶことではなく、利用者が具体的な資源配分と制約を変更し、介入点と
-選択肢喪失条件を探索できることを中核価値とする。
-
 ## スコープ
 
 - 2026年の公開情報から作る版管理された`scenario_snapshot`
 - 一つの追加重点枠と、国際統合型・国内自立型・開放基盤型の三分岐
 - `2026 → 2030 → 2035 → 2040`の四ラウンド
 - 物理・物質、経済・産業・組織、認知・文化・意味から、一本の連鎖を検証するMVP最小接続
-- 宇宙 × 認知・文化を二つの出発領域とし、経済・組織を両者の伝達経路とする
-- 予算配分、依存、公開度、人材、外部shockを変更して反復実行できるparameterized simulation
 - 六観測軸、モデル内部遷移trace、研究根拠台帳、model card、run manifest
-- LLMなしで再生できる決定論的コアと、ADR-0008で境界を固定したハッカソン用の限定的なLLM提案
+- LLMなしで再生できる決定論的コアと、MVP後の限定的なLLM提案
 - 深い不確実性下で、単一予測ではなく脆弱性、後悔、選択肢保持を比較する方法
 
 ## 非目標
@@ -88,15 +80,14 @@ goal_id: space-civilization-choice-mvp-v1
 - [ ] `ROBUST-001`: XLRM、performance threshold、ensemble manifest、robustness／regret定義を固定し、脆弱性条件と選択肢喪失条件をholdoutで再確認できる
 - [ ] `FEEDBACK-001`: 各評価runにowner、判定、next action、resume condition、evidenceがある
 - [ ] `HUMAN-001`: 15〜25分の比較体験とモデル内因果の説明可能性を、人間レビュー記録で確認する
-- [x] `CI-001`: [receipt](evidence/done-when/CI-001.json) exact HEADでreplay、schema、trace、goal contract、security gateのCIが成功する
+- [ ] `CI-001`: exact HEADでreplay、schema、trace、goal contract、security gateのCIが成功する（GitHub rulesetを実行時SSOTとし、同一commit内receiptによる自己証明はしない）
 - [ ] `PUBLIC-001`: 公開前レビュー後に、README、license、SECURITY、secret／個人path scan、公開read-backを確認する
 
 ## 現在の達成状態
 
 - `status`: active
-- Phase 1の決定論的replay、model_internal trace、exact HEAD CI receiptを実装済み
-- ハッカソンdemo sliceとして三分岐比較、限定AI提案、最小Web UIを実装中
-- model card、感度分析、完成版UI、人間評価は未実装
+- Phase 1の一分岐fixture、決定論的replay、model_internal trace、exact HEAD CI receiptを実装済み
+- 三分岐比較、外生event共有、model card、感度分析、UIは未実装
 - 上記チェック項目は、対応する一次証拠が揃うまで未完了のまま保持する
 
 ## 最小PDCAとフィードバックループ

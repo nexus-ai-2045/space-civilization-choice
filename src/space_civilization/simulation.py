@@ -25,20 +25,41 @@ AGENTS = (
     "research_and_next_generation_alliance",
     "international_partners",
 )
-# Phase 1で許可する行動。SIMULATION_DESIGNの動詞集合をdomestic fixtureへ射影したfail-closed enum。
-PHASE1_ALLOWED_ACTIONS = frozenset(
-    {
-        "allocate_to_domestic_core_components",
-        "qualify_redundant_component_supply",
-        "expand_maintainer_training",
-        "operate_with_domestic_maintenance_chain",
-    }
-)
+# Phase 1の行動を、その意味を実装する規則とbase deltaへfail-closedで束縛する。
+PHASE1_TRANSITION_RULES = {
+    "allocate_to_domestic_core_components": {
+        "rule_id": "R-DOM-01", "axis_deltas": (-2, 8, 1, 4, -3, 1)
+    },
+    "qualify_redundant_component_supply": {
+        "rule_id": "R-DOM-02", "axis_deltas": (3, 7, 0, 2, 1, 1)
+    },
+    "expand_maintainer_training": {
+        "rule_id": "R-DOM-03", "axis_deltas": (2, 3, 1, 8, 0, 2)
+    },
+    "operate_with_domestic_maintenance_chain": {
+        "rule_id": "R-DOM-04", "axis_deltas": (4, 4, -1, 3, -2, 1)
+    },
+}
+PHASE1_ALLOWED_ACTIONS = frozenset(PHASE1_TRANSITION_RULES)
 ACTION_EFFECTS = {
     "allocate_to_domestic_core_components": {"industrial_reproduction": 3, "relationship_choice": -1},
     "qualify_redundant_component_supply": {"access_and_operation": 3, "industrial_reproduction": 1},
     "expand_maintainer_training": {"knowledge_continuity": 3, "public_legitimacy": 1},
     "operate_with_domestic_maintenance_chain": {"access_and_operation": 2, "rule_shaping": -1},
+}
+PHASE1_BRANCH_RULES = {
+    "international_integration": {
+        "R-INT-01": ("qualify_redundant_component_supply", (7, 1, 5, 2, 7, 2)),
+        "R-INT-02": ("qualify_redundant_component_supply", (6, 2, 4, 1, 6, 1)),
+        "R-INT-03": ("expand_maintainer_training", (3, 1, 5, 5, 5, 2)),
+        "R-INT-04": ("operate_with_domestic_maintenance_chain", (6, 0, 6, 2, 6, 1)),
+    },
+    "open_platform": {
+        "R-OPEN-01": ("allocate_to_domestic_core_components", (4, 3, 6, 5, 4, 5)),
+        "R-OPEN-02": ("qualify_redundant_component_supply", (5, 4, 5, 3, 4, 3)),
+        "R-OPEN-03": ("expand_maintainer_training", (3, 3, 4, 7, 3, 4)),
+        "R-OPEN-04": ("operate_with_domestic_maintenance_chain", (4, 3, 5, 4, 4, 4)),
+    },
 }
 CLASSIFICATION = {
     "record_kind": "simulated_transition",
@@ -71,24 +92,38 @@ def sha256_json(value: Any) -> str:
     return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
 
 
+def deterministic_execution_input_hash(fixture: dict[str, Any]) -> str:
+    """実行入力fixtureのcanonical JSON digestを再計算する。"""
+    return sha256_json(fixture)
+
+
 def load_fixture(path: str | Path) -> dict[str, Any]:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise SimulationError("fixture must be a JSON object")
     validate_fixture(data)
     return data
 
 
 def validate_fixture(data: dict[str, Any]) -> None:
+    if not isinstance(data, dict):
+        raise SimulationError("fixture must be a JSON object")
     required = {"scenario_snapshot_id", "model_version", "seed", "branch", "initial_state", "rounds"}
     missing = sorted(required - data.keys())
     if missing:
         raise SimulationError(f"fixture required fields missing: {missing}")
-    if data["branch"] not in {"international_integration", "domestic_autonomy", "open_platform"}:
+    if data["branch"] not in {"domestic_autonomy", *PHASE1_BRANCH_RULES}:
         raise SimulationError("unknown technology branch")
     if not _is_int(data["seed"]):
         raise SimulationError("seed must be an integer")
-    if [item.get("year") for item in data["rounds"]] != list(ROUNDS):
+    rounds = data["rounds"]
+    if not isinstance(rounds, list):
+        raise SimulationError("rounds must be a list")
+    if [item.get("year") if isinstance(item, dict) else None for item in rounds] != list(ROUNDS):
         raise SimulationError(f"rounds must be {list(ROUNDS)}")
     state = data["initial_state"]
+    if not isinstance(state, dict):
+        raise SimulationError("initial_state must be an object")
     if set(state.get("axes", {})) != set(AXES):
         raise SimulationError("initial_state.axes must contain the six canonical axes")
     if set(state.get("agents", {})) != set(AGENTS):
@@ -96,10 +131,21 @@ def validate_fixture(data: dict[str, Any]) -> None:
     for axis, value in state["axes"].items():
         if not _is_int(value) or not 0 <= value <= 100:
             raise SimulationError(f"axis out of range: {axis}")
-    for index, item in enumerate(data["rounds"], start=1):
-        if not item.get("action") or not item.get("rule_id") or not item.get("evidence_ref"):
+    for index, item in enumerate(rounds, start=1):
+        if not isinstance(item, dict):
+            raise SimulationError(f"round {index} must be an object")
+        evidence_ref = item.get("evidence_ref")
+        if (
+            not isinstance(evidence_ref, str)
+            or not evidence_ref.strip()
+            or not evidence_ref.startswith("model-assumption:")
+            or not evidence_ref.removeprefix("model-assumption:").strip()
+        ):
+            raise SimulationError(f"round {index} evidence_ref must be a model-assumption string")
+        if not item.get("action") or not item.get("rule_id"):
             raise SimulationError(f"round {index} lacks trace fields")
-        if item.get("action") not in PHASE1_ALLOWED_ACTIONS:
+        transition_rule = PHASE1_TRANSITION_RULES.get(item.get("action"))
+        if transition_rule is None:
             raise SimulationError(f"round {index} action is not a Phase 1 allowed action")
         if item.get("actor") not in AGENTS:
             raise SimulationError(f"round {index} actor is not a canonical agent")
@@ -110,6 +156,37 @@ def validate_fixture(data: dict[str, Any]) -> None:
         deltas = item.get("axis_deltas", {})
         if set(deltas) != set(AXES) or any(not _is_int(v) for v in deltas.values()):
             raise SimulationError(f"round {index} axis_deltas invalid")
+        base_action = item.get("base_action", item["action"])
+        base_rule_id = item.get("base_rule_id", item["rule_id"])
+        base_deltas = item.get("base_axis_deltas", deltas)
+        if data["branch"] == "domestic_autonomy":
+            base_transition_rule = PHASE1_TRANSITION_RULES.get(base_action)
+            if base_transition_rule is None:
+                raise SimulationError(f"round {index} base action has no transition rule")
+            expected_action = base_action
+            expected_rule_id = base_transition_rule["rule_id"]
+            expected_values = base_transition_rule["axis_deltas"]
+        else:
+            branch_rule = PHASE1_BRANCH_RULES[data["branch"]].get(base_rule_id)
+            if branch_rule is None:
+                raise SimulationError(
+                    f"round {index} has no transition rule for branch; "
+                    "domestic_autonomy rules cannot be relabeled"
+                )
+            expected_action, expected_values = branch_rule
+            expected_rule_id = base_rule_id
+        expected_deltas = dict(zip(AXES, expected_values, strict=True))
+        if base_action != expected_action or base_rule_id != expected_rule_id or base_deltas != expected_deltas:
+            raise SimulationError(
+                f"round {index} does not match transition rule for action {base_action}"
+            )
+        if "base_action" in item:
+            if not {"base_rule_id", "base_axis_deltas"} <= item.keys():
+                raise SimulationError(f"round {index} adaptive override lacks base provenance")
+            if deltas != replace_action_effect(base_action, item["action"], base_deltas):
+                raise SimulationError(f"round {index} adaptive action effect is not canonical")
+        elif item["action"] != base_action or deltas != base_deltas:
+            raise SimulationError(f"round {index} unbound action override")
 
 
 def _apply_deltas(axes: dict[str, int], deltas: dict[str, int]) -> dict[str, int]:
@@ -123,12 +200,16 @@ def _apply_deltas(axes: dict[str, int], deltas: dict[str, int]) -> dict[str, int
     return after
 
 
-def apply_action_effect(action: str, base_deltas: dict[str, int]) -> dict[str, int]:
-    """許可済みactionをコア所有の規則でdeltaへ変換する。"""
-    if action not in PHASE1_ALLOWED_ACTIONS or action not in ACTION_EFFECTS:
+def _validate_action_deltas(action: str, base_deltas: dict[str, int]) -> None:
+    if action not in PHASE1_ALLOWED_ACTIONS:
         raise SimulationError("action has no canonical effect rule")
     if set(base_deltas) != set(AXES) or any(not _is_int(value) for value in base_deltas.values()):
         raise SimulationError("base deltas must contain six integer axes")
+
+
+def apply_action_effect(action: str, base_deltas: dict[str, int]) -> dict[str, int]:
+    """許可済みactionのコア所有deltaを加える。"""
+    _validate_action_deltas(action, base_deltas)
     effective = deepcopy(base_deltas)
     for axis, delta in ACTION_EFFECTS[action].items():
         effective[axis] += delta
@@ -137,30 +218,28 @@ def apply_action_effect(action: str, base_deltas: dict[str, int]) -> dict[str, i
 
 def remove_action_effect(action: str, base_deltas: dict[str, int]) -> dict[str, int]:
     """fixtureに埋め込まれた元action寄与を取り除く。"""
-    if action not in PHASE1_ALLOWED_ACTIONS or action not in ACTION_EFFECTS:
-        raise SimulationError("action has no canonical effect rule")
-    if set(base_deltas) != set(AXES) or any(not _is_int(value) for value in base_deltas.values()):
-        raise SimulationError("base deltas must contain six integer axes")
+    _validate_action_deltas(action, base_deltas)
     effective = deepcopy(base_deltas)
     for axis, delta in ACTION_EFFECTS[action].items():
         effective[axis] -= delta
     return effective
 
 
-def replace_action_effect(previous_action: str, next_action: str, base_deltas: dict[str, int]) -> dict[str, int]:
+def replace_action_effect(
+    previous_action: str, next_action: str, base_deltas: dict[str, int]
+) -> dict[str, int]:
     """元action寄与を除いてから代替action寄与を適用する。"""
-    without_previous = remove_action_effect(previous_action, base_deltas)
-    return apply_action_effect(next_action, without_previous)
+    return apply_action_effect(next_action, remove_action_effect(previous_action, base_deltas))
 
 
-def _deterministic_draw(seed: int, year: int, exogenous_event: str) -> float:
+def deterministic_draw(seed: int, year: int, exogenous_event: str) -> float:
     """seedとround入力から、環境非依存の[0, 1) drawを生成する。"""
     material = canonical_json({"seed": seed, "year": year, "exogenous_event": exogenous_event})
     numerator = int.from_bytes(hashlib.sha256(material.encode("utf-8")).digest()[:8], "big")
     return numerator / 2**64
 
 
-def _realize_exogenous_effect(event: str, random_draw: float) -> dict[str, int | str]:
+def realize_exogenous_effect(event: str, random_draw: float) -> dict[str, int | str]:
     modifier = -1 if random_draw < 1 / 3 else 0 if random_draw < 2 / 3 else 1
     return {"axis": EXOGENOUS_EVENT_AXES[event], "modifier": modifier}
 
@@ -177,31 +256,50 @@ def build_model_internal_trace(events: list[dict[str, Any]]) -> list[dict[str, A
                 "model_rule": event["rule_id"],
                 "evidence_refs": [event["evidence_ref"]],
                 "causal_scope": "model_internal",
+                "base_axis_deltas": deepcopy(event["base_axis_deltas"]),
                 "axis_deltas": deepcopy(event["axis_deltas"]),
+                "exogenous_effect": deepcopy(event["exogenous_effect"]),
+                "random_draw": event["random_draw"],
             }
         )
     return records
 
 
+def common_scenario_snapshot(fixture: dict[str, Any]) -> dict[str, Any]:
+    """BRANCH-001で三分岐が共有するscenario入力だけを抜き出す。
+
+    branch、actor、action、axis_deltas、rule_id、evidence_refは分岐固有の実行入力なので
+    共有snapshot hashへ含めない。seed / model_versionはreplay署名の別フィールドとして扱う。
+    """
+    return {
+        "scenario_snapshot_id": fixture["scenario_snapshot_id"],
+        "initial_state": deepcopy(fixture["initial_state"]),
+        "rounds": [
+            {
+                "year": item["year"],
+                "exogenous_event": item["exogenous_event"],
+            }
+            for item in fixture["rounds"]
+        ],
+    }
+
+
 def run_simulation(fixture: dict[str, Any]) -> dict[str, Any]:
     validate_fixture(fixture)
-    snapshot = {
-        "scenario_snapshot_id": fixture["scenario_snapshot_id"],
-        "model_version": fixture["model_version"],
-        "initial_state": fixture["initial_state"],
-    }
-    scenario_snapshot_hash = sha256_json(snapshot)
+    # 共有scenario入力だけをhashし、分岐固有の実行入力はevent log側へ分離する。
+    scenario_snapshot_hash = sha256_json(common_scenario_snapshot(fixture))
     exogenous_event_stream = [
         {
             "year": item["year"],
             "event": item["exogenous_event"],
-            "random_draw": _deterministic_draw(fixture["seed"], item["year"], item["exogenous_event"]),
+            "random_draw": deterministic_draw(fixture["seed"], item["year"], item["exogenous_event"]),
         }
         for item in fixture["rounds"]
     ]
     manifest = {
         "scenario_snapshot_id": fixture["scenario_snapshot_id"],
         "scenario_snapshot_hash": scenario_snapshot_hash,
+        "deterministic_execution_input_hash": deterministic_execution_input_hash(fixture),
         "seed": fixture["seed"],
         "model_version": fixture["model_version"],
         "branch_id": fixture["branch"],
@@ -211,9 +309,10 @@ def run_simulation(fixture: dict[str, Any]) -> dict[str, Any]:
     events: list[dict[str, Any]] = []
     for turn_id, item in enumerate(fixture["rounds"], start=1):
         before = deepcopy(state["axes"])
-        exogenous_effect = _realize_exogenous_effect(
+        exogenous_effect = realize_exogenous_effect(
             item["exogenous_event"], exogenous_event_stream[turn_id - 1]["random_draw"]
         )
+        exogenous_effect["provenance"] = item["exogenous_event"]
         effective_deltas = deepcopy(item["axis_deltas"])
         effective_deltas[exogenous_effect["axis"]] += exogenous_effect["modifier"]
         after = _apply_deltas(before, effective_deltas)
@@ -227,7 +326,7 @@ def run_simulation(fixture: dict[str, Any]) -> dict[str, Any]:
                 "action": item["action"],
                 "before": before,
                 "after": after,
-                "base_axis_deltas": item["axis_deltas"],
+                "base_axis_deltas": deepcopy(item["axis_deltas"]),
                 "axis_deltas": effective_deltas,
                 "exogenous_effect": exogenous_effect,
                 "rule_id": item["rule_id"],

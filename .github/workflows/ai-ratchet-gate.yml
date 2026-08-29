@@ -7,6 +7,7 @@ on:
       - main
 
 permissions:
+  checks: read
   contents: read
 
 jobs:
@@ -33,7 +34,10 @@ jobs:
           GITLEAKS_ENABLE_COMMENTS: 'false'
 
   goal-contract:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout exact HEAD with history
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -44,9 +48,20 @@ jobs:
 
       - name: Verify exact HEAD
         shell: bash
+        if: runner.os != 'Windows'
         env:
           EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Verify exact HEAD (Windows)
+        shell: pwsh
+        if: runner.os == 'Windows'
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if ((git rev-parse HEAD) -ne $env:EXPECTED_SHA) {
+            throw "checkout is not the event exact HEAD"
+          }
 
       - name: Setup Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -54,13 +69,14 @@ jobs:
           python-version: '3.13'
 
       - name: Install test runner
-        run: python -m pip install --disable-pip-version-check pytest==8.4.1
+        run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
 
       - name: Test project goal contract
         run: python -m pytest -q
 
       - name: Check project goal contract
-        run: python scripts/check_project_goal.py --json
+        # CI exact-head readback is performed after all required jobs complete.
+        run: python scripts/check_project_goal.py --json --static-ci
 
       - name: Check operational adoption contract
         run: python scripts/check_operational_adoption.py --json
@@ -110,3 +126,24 @@ jobs:
 
       - name: Check tracked and ignored paths
         run: python -m ai_ratchet_gate --repo .
+
+  ci-exact-head-verifier:
+    needs: [secret-scan, goal-contract, ratchet]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify checkout exact HEAD
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Verify completed CI for exact HEAD
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/check_project_goal.py --json --verify-ci-head
