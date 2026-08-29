@@ -175,6 +175,12 @@ def test_displayed_trace_includes_saturation_records():
     joined = "\n".join(row for view in result["rounds"] for row in view["trace"])
     assert any(event["rule_id"] in joined for event in saturations)
     assert "attempted=" in joined and "applied=" in joined
+    for view in result["rounds"]:
+        assert all(
+            f'SATURATION year={view["year"]} ' in row
+            for row in view["trace"]
+            if row.startswith("SATURATION ")
+        )
 
 
 def test_displayed_trace_projects_applied_deltas_for_every_accepted_action():

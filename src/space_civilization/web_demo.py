@@ -144,7 +144,10 @@ def _proposal_rows(round_item: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _trace_rows(
-    records: list[dict[str, Any]], saturations: list[dict[str, Any]]
+    records: list[dict[str, Any]],
+    saturations: list[dict[str, Any]],
+    *,
+    year: int,
 ) -> list[str]:
     rows: list[str] = []
     for record in records:
@@ -160,7 +163,7 @@ def _trace_rows(
             f'applied={record["applied_delta"]:+d}'
         )
     rows.extend(
-        f'SATURATION rule={event["rule_id"]} axis={event["axis"]} '
+        f'SATURATION year={year} rule={event["rule_id"]} axis={event["axis"]} '
         f'attempted={event["attempted_delta"]:+d} '
         f'applied={event["applied_delta"]:+d}'
         for event in saturations
@@ -176,7 +179,9 @@ def _round_view(round_item: dict[str, Any], round_index: int) -> dict[str, Any]:
         "proposals": _proposal_rows(round_item),
         "axes": _axes_rows(round_item["after"]),
         "trace": _trace_rows(
-            execution_records, round_item.get("transition_saturations", [])
+            execution_records,
+            round_item.get("transition_saturations", []),
+            year=round_item["year"],
         ),
         "execution_records": execution_records,
         "accepted_actions": [item["action_id"] for item in round_item["accepted_actions"]],
