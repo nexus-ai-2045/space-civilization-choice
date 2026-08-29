@@ -52,6 +52,8 @@ REQUIRED_CI_JOBS = (
 )
 CI_EXACT_HEAD_VERIFIER_JOB = "ci-exact-head-verifier"
 RULESET_REQUIRED_CHECKS = (*REQUIRED_CI_JOBS, CI_EXACT_HEAD_VERIFIER_JOB)
+ACTIVE_MAIN_RULESET_ID = 21258820
+GITHUB_ACTIONS_APP_ID = 15368
 CANONICAL_TRACE_AXES = frozenset(
     {
         "access_and_operation",
@@ -75,6 +77,7 @@ PHASE1_ACTION_RULES = {
 LiveVerifier = Callable[[str, dict[str, Any]], dict[str, Any]]
 HeadResolver = Callable[[Path], str]
 PersonalPathScanner = Callable[[Path], tuple[bool, list[str]]]
+RulesetReader = Callable[[], frozenset[str]]
 
 REQUIRED_GOAL_HEADINGS = (
     "ゴール",
@@ -512,6 +515,23 @@ def _scan_tracked_personal_paths(repo: Path) -> tuple[bool, list[str]]:
     return not findings, sorted(findings)
 
 
+def _reject_nonstandard_json_constant(value: str) -> None:
+    """Python jsonのNaN/Infinity拡張を拒否し、標準JSONへfail-closedする。"""
+    raise ValueError(f"non-standard JSON constant: {value}")
+
+
+def _loads_strict_json(text: str) -> Any:
+    return json.loads(text, parse_constant=_reject_nonstandard_json_constant)
+
+
+def _read_jsonl_objects(path: Path) -> list[Any]:
+    return [
+        _loads_strict_json(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
 def _github_json(api_path: str) -> dict[str, Any]:
     headers = {
         "Accept": "application/vnd.github+json",
@@ -530,6 +550,36 @@ def _github_json(api_path: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("GitHub API response is not an object")
     return payload
+
+
+def _ruleset_required_contexts(payload: dict[str, Any]) -> frozenset[str]:
+    contexts: set[str] = set()
+    rules = payload.get("rules")
+    if not isinstance(rules, list):
+        return frozenset()
+    for rule in rules:
+        if not isinstance(rule, dict) or rule.get("type") != "required_status_checks":
+            continue
+        parameters = rule.get("parameters")
+        if not isinstance(parameters, dict):
+            continue
+        checks = parameters.get("required_status_checks")
+        if not isinstance(checks, list):
+            continue
+        for check in checks:
+            if not isinstance(check, dict):
+                continue
+            context = check.get("context")
+            if isinstance(context, str) and context:
+                contexts.add(context)
+    return frozenset(contexts)
+
+
+def _default_ruleset_reader() -> frozenset[str]:
+    payload = _github_json(
+        f"/repos/{CANONICAL_REPOSITORY}/rulesets/{ACTIVE_MAIN_RULESET_ID}"
+    )
+    return _ruleset_required_contexts(payload)
 
 
 def _default_live_verifier(
@@ -607,7 +657,7 @@ def _read_json_evidence(
     findings: list[dict[str, str]],
 ) -> Any | None:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return _loads_strict_json(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
         _evidence_error(
             findings,
@@ -673,6 +723,7 @@ def _validate_done_when_artifact_contents(
     live_verifier: LiveVerifier,
     head_resolver: HeadResolver,
     personal_path_scanner: PersonalPathScanner,
+    ruleset_reader: RulesetReader,
     verify_ci_live: bool,
 ) -> None:
     """11個のdone_whenごとに、自己申告ではない最小証拠構造を検証する。"""
@@ -737,11 +788,7 @@ def _validate_done_when_artifact_contents(
             return
         stored = _read_json_evidence(paths["canonical_manifest"], goal_id, "canonical_manifest", findings)
         try:
-            events = [
-                json.loads(line)
-                for line in paths["event_log"].read_text(encoding="utf-8").splitlines()
-                if line.strip()
-            ]
+            events = _read_jsonl_objects(paths["event_log"])
         except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
             _evidence_error(findings, goal_id, "event_log_invalid_jsonl")
             return
@@ -970,11 +1017,7 @@ def _validate_done_when_artifact_contents(
                     valid = False
                     break
                 try:
-                    events = [
-                        json.loads(line)
-                        for line in log_path.read_text(encoding="utf-8").splitlines()
-                        if line.strip()
-                    ]
+                    events = _read_jsonl_objects(log_path)
                 except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
                     valid = False
                     break
@@ -1003,22 +1046,14 @@ def _validate_done_when_artifact_contents(
         )
         if trace_path.suffix == ".jsonl":
             try:
-                records = [
-                    json.loads(line)
-                    for line in trace_path.read_text(encoding="utf-8").splitlines()
-                    if line.strip()
-                ]
+                records = _read_jsonl_objects(trace_path)
             except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
                 records = None
         else:
             payload = _read_json_evidence(trace_path, goal_id, "trace", findings)
             records = payload.get("records") if isinstance(payload, dict) else payload
         try:
-            events = [
-                json.loads(line)
-                for line in paths["event_log"].read_text(encoding="utf-8").splitlines()
-                if line.strip()
-            ]
+            events = _read_jsonl_objects(paths["event_log"])
         except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
             _evidence_error(findings, goal_id, "event_log_invalid_jsonl")
             return
@@ -1299,6 +1334,20 @@ def _validate_done_when_artifact_contents(
         )
         if not live_valid:
             _evidence_error(findings, goal_id, "ci_live_readback_mismatch")
+            return
+        try:
+            ruleset_contexts = ruleset_reader()
+        except (OSError, ValueError, urllib.error.URLError):
+            _evidence_error(findings, goal_id, "ci_ruleset_readback_unavailable")
+            return
+        if not set(RULESET_REQUIRED_CHECKS).issubset(ruleset_contexts):
+            _evidence_error(
+                findings,
+                goal_id,
+                "ci_ruleset_required_checks_mismatch",
+                expected="|".join(RULESET_REQUIRED_CHECKS),
+                actual="|".join(sorted(ruleset_contexts)),
+            )
         return
 
     if goal_id == "PUBLIC-001":
@@ -1369,6 +1418,7 @@ def _validate_done_when_evidence(
     live_verifier: LiveVerifier,
     head_resolver: HeadResolver,
     personal_path_scanner: PersonalPathScanner,
+    ruleset_reader: RulesetReader,
     verify_ci_live: bool,
 ) -> None:
     """done_when固有の正本receiptと、その型付き一次証拠を検証する。"""
@@ -1398,7 +1448,7 @@ def _validate_done_when_evidence(
         return
 
     try:
-        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        receipt = _loads_strict_json(receipt_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
         _evidence_error(
             findings,
@@ -1502,6 +1552,7 @@ def _validate_done_when_evidence(
             live_verifier,
             head_resolver,
             personal_path_scanner,
+            ruleset_reader,
             verify_ci_live,
         )
 
@@ -1580,12 +1631,14 @@ def build_report(
     live_verifier: LiveVerifier | None = None,
     head_resolver: HeadResolver | None = None,
     personal_path_scanner: PersonalPathScanner | None = None,
+    ruleset_reader: RulesetReader | None = None,
     verify_ci_live: bool = True,
 ) -> dict[str, Any]:
     repo = repo.resolve()
     live_verifier = live_verifier or _default_live_verifier
     head_resolver = head_resolver or _resolve_git_head
     personal_path_scanner = personal_path_scanner or _scan_tracked_personal_paths
+    ruleset_reader = ruleset_reader or _default_ruleset_reader
     findings: list[dict[str, str]] = []
 
     for relative in REQUIRED_FILES:
@@ -1708,6 +1761,7 @@ def build_report(
             live_verifier,
             head_resolver,
             personal_path_scanner,
+            ruleset_reader,
             verify_ci_live,
         )
         if len(findings) == finding_count:
@@ -1959,11 +2013,13 @@ def build_ci_exact_head_report(
     *,
     live_verifier: LiveVerifier | None = None,
     head_resolver: HeadResolver | None = None,
+    ruleset_reader: RulesetReader | None = None,
 ) -> dict[str, Any]:
     """完了済みCIを外側から検証し、検証job自身への依存を作らない。"""
     repo = repo.resolve()
     live_verifier = live_verifier or _default_live_verifier
     head_resolver = head_resolver or _resolve_git_head
+    ruleset_reader = ruleset_reader or _default_ruleset_reader
     findings: list[dict[str, str]] = []
     try:
         inspected_head = head_resolver(repo)
@@ -1995,6 +2051,18 @@ def build_ci_exact_head_report(
                         job=job,
                         conclusion=str(conclusion or "pending"),
                     )
+    # ruleset整合はCI-001完了条件の実行時SSOT。post-CI verifierはprerequisite jobsのみを
+    # 判定し、ruleset書換自体はoperator gate（本エージェントからは403）とする。
+    ruleset_contexts: frozenset[str] = frozenset()
+    ruleset_read_ok = False
+    try:
+        ruleset_contexts = ruleset_reader()
+        ruleset_read_ok = True
+    except (OSError, ValueError, urllib.error.URLError):
+        ruleset_read_ok = False
+    ruleset_aligned = ruleset_read_ok and set(RULESET_REQUIRED_CHECKS).issubset(
+        ruleset_contexts
+    )
     valid = not findings
     return {
         "schema": "space_civilization_ci_exact_head_check.v1",
@@ -2003,6 +2071,10 @@ def build_ci_exact_head_report(
         "inspected_head": inspected_head,
         "required_jobs": list(REQUIRED_CI_JOBS),
         "ruleset_required_checks": list(RULESET_REQUIRED_CHECKS),
+        "ruleset_id": ACTIVE_MAIN_RULESET_ID,
+        "ruleset_live_contexts": sorted(ruleset_contexts),
+        "ruleset_aligned": ruleset_aligned,
+        "ruleset_read_ok": ruleset_read_ok,
         "findings": findings,
         "external_actions_performed": False,
     }

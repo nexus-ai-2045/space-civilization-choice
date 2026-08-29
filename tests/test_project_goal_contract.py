@@ -22,6 +22,10 @@ def _canonical_text_bytes(path: Path) -> bytes:
 
 
 class ProjectGoalContractTest(unittest.TestCase):
+    @staticmethod
+    def _aligned_ruleset_reader() -> frozenset[str]:
+        return frozenset(MODULE.RULESET_REQUIRED_CHECKS)
+
     def _copy_contract(self, destination: Path) -> None:
         for relative in MODULE.REQUIRED_FILES:
             path = destination / relative
@@ -1224,6 +1228,7 @@ class ProjectGoalContractTest(unittest.TestCase):
                     "conclusion": "success",
                     "jobs": {job: "success" for job in MODULE.REQUIRED_CI_JOBS},
                 },
+                ruleset_reader=self._aligned_ruleset_reader,
             )
 
         self.assertTrue(report["contract_valid"], report["findings"])
@@ -1266,6 +1271,7 @@ class ProjectGoalContractTest(unittest.TestCase):
                         "conclusion": "pending",
                         "jobs": jobs,
                     },
+                    ruleset_reader=self._aligned_ruleset_reader,
                 )
                 self.assertFalse(report["contract_valid"])
                 self.assertIn(
@@ -1282,6 +1288,7 @@ class ProjectGoalContractTest(unittest.TestCase):
                 "conclusion": "success",
                 "jobs": {job: "success" for job in MODULE.REQUIRED_CI_JOBS},
             },
+            ruleset_reader=self._aligned_ruleset_reader,
         )
         self.assertFalse(report["contract_valid"])
         self.assertIn("ci_exact_head_mismatch", {item["code"] for item in report["findings"]})
@@ -1305,6 +1312,97 @@ class ProjectGoalContractTest(unittest.TestCase):
         self.assertIn("needs: [secret-scan, goal-contract, ratchet]", workflow)
         self.assertIn("--verify-ci-head", workflow)
         self.assertNotIn(MODULE.CI_EXACT_HEAD_VERIFIER_JOB, MODULE.REQUIRED_CI_JOBS)
+
+    def test_operations_documents_ruleset_required_checks(self) -> None:
+        text = (ROOT / "docs/OPERATIONS.md").read_text(encoding="utf-8")
+        self.assertIn(str(MODULE.ACTIVE_MAIN_RULESET_ID), text)
+        self.assertIn(str(MODULE.GITHUB_ACTIONS_APP_ID), text)
+        self.assertIn("RULESET_REQUIRED_CHECKS", text)
+        for check in MODULE.RULESET_REQUIRED_CHECKS:
+            self.assertIn(f"`{check}`", text)
+        self.assertEqual(
+            MODULE.RULESET_REQUIRED_CHECKS[-1],
+            MODULE.CI_EXACT_HEAD_VERIFIER_JOB,
+        )
+
+    def test_ci_requires_enforced_ruleset_to_include_post_verifier(self) -> None:
+        tip = "b" * 40
+        with tempfile.TemporaryDirectory() as directory:
+            tmp_path = Path(directory)
+            self._copy_contract(tmp_path)
+            self._activate_done_when(tmp_path, "CI-001")
+            self._write_ci_evidence(tmp_path, "a" * 40)
+
+            report = MODULE.build_report(
+                tmp_path,
+                head_resolver=lambda _: tip,
+                live_verifier=lambda _goal_id, evidence: {
+                    "repository": MODULE.CANONICAL_REPOSITORY,
+                    "head_sha": evidence["inspected_head"],
+                    "conclusion": "success",
+                    "jobs": {job: "success" for job in MODULE.REQUIRED_CI_JOBS},
+                },
+                ruleset_reader=lambda: frozenset(
+                    {
+                        "secret-scan",
+                        "goal-contract",
+                        "ratchet (ubuntu-latest)",
+                        "ratchet (windows-latest)",
+                    }
+                ),
+            )
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "ci_ruleset_required_checks_mismatch",
+            {item.get("reason") for item in report["findings"]},
+        )
+
+    def test_ci_post_verifier_reports_ruleset_alignment_without_failing(self) -> None:
+        head = "a" * 40
+        report = MODULE.build_ci_exact_head_report(
+            ROOT,
+            head_resolver=lambda _: head,
+            live_verifier=lambda *_: {
+                "head_sha": head,
+                "conclusion": "success",
+                "jobs": {job: "success" for job in MODULE.REQUIRED_CI_JOBS},
+            },
+            ruleset_reader=lambda: frozenset({"secret-scan"}),
+        )
+        self.assertTrue(report["contract_valid"], report["findings"])
+        self.assertFalse(report["ruleset_aligned"])
+        self.assertEqual(report["ruleset_live_contexts"], ["secret-scan"])
+        self.assertEqual(
+            report["ruleset_required_checks"],
+            list(MODULE.RULESET_REQUIRED_CHECKS),
+        )
+
+    def test_evidence_rejects_nonstandard_json_constants(self) -> None:
+        for token in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(token=token):
+                with self.assertRaises(ValueError):
+                    MODULE._loads_strict_json(f'{{"ignored": {token}}}')
+
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            stored, _event_log, receipt = self._prepare_replay_evidence(repo)
+            payload = json.loads(stored.read_text(encoding="utf-8"))
+            raw = json.dumps(payload, ensure_ascii=False)
+            stored.write_text(raw[:-1] + ', "ignored_non_json": NaN}', encoding="utf-8")
+            receipt_payload = json.loads(receipt.read_text(encoding="utf-8"))
+            receipt_payload["artifact_sha256"]["canonical_manifest"] = hashlib.sha256(
+                _canonical_text_bytes(stored)
+            ).hexdigest()
+            receipt.write_text(json.dumps(receipt_payload), encoding="utf-8")
+
+            report = MODULE.build_report(repo)
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "artifact_invalid_json",
+            {item.get("reason") for item in report["findings"]},
+        )
 
     def test_public_requires_validated_ci_and_human_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1366,6 +1464,7 @@ class ProjectGoalContractTest(unittest.TestCase):
                 head_resolver=lambda _: inspected_head,
                 live_verifier=live_verifier,
                 personal_path_scanner=lambda _: (True, []),
+                ruleset_reader=self._aligned_ruleset_reader,
             )
 
         self.assertFalse(report["contract_valid"])
@@ -1391,6 +1490,7 @@ class ProjectGoalContractTest(unittest.TestCase):
                     tmp_path,
                     head_resolver=lambda _: inspected_head,
                     personal_path_scanner=lambda _: (True, []),
+                    ruleset_reader=self._aligned_ruleset_reader,
                     live_verifier=lambda goal_id, _evidence: {
                         "repository": MODULE.CANONICAL_REPOSITORY,
                         "head_sha": inspected_head,
