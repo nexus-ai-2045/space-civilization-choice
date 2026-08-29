@@ -41,6 +41,20 @@ def test_adaptive_override_preserves_base_rule_and_uses_distinct_rule(monkeypatc
         assert run["trace"][0]["base_model_rule"] == first["base_rule_id"]
 
 
+def test_adaptive_event_preserves_fixture_base_deltas_separately_from_effective_deltas():
+    result = build_demo_result()
+    for branch, run in result["branches"].items():
+        fixture = web_demo.load_fixture(
+            web_demo.FIXTURES[branch], allow_hackathon_demo_branches=True
+        )
+        event = run["events"][0]
+        assert event["base_axis_deltas"] == fixture["rounds"][0]["axis_deltas"]
+        assert event["axis_deltas"] == {
+            axis: event["after"][axis] - event["before"][axis]
+            for axis in AXES
+        }
+
+
 def test_domestic_adaptive_override_rejects_forged_base_rule():
     data = web_demo.load_fixture(web_demo.FIXTURES["domestic_autonomy"])
     first = data["rounds"][0]

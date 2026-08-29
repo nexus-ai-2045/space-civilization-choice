@@ -366,7 +366,9 @@ def run_simulation(fixture: dict[str, Any], *, allow_hackathon_demo_branches: bo
                 "action": item["action"],
                 "before": before,
                 "after": after,
-                "base_axis_deltas": deepcopy(item["axis_deltas"]),
+                "base_axis_deltas": deepcopy(
+                    item.get("base_axis_deltas", item["axis_deltas"])
+                ),
                 "axis_deltas": effective_deltas,
                 "exogenous_effect": exogenous_effect,
                 "rule_id": item["rule_id"],

@@ -10,7 +10,7 @@ from typing import Any
 
 from .adaptive_loop import run_adaptive_simulation
 from .comparison import BRANCHES, compare_simulations
-from .parameter_registry import ParameterError, expand_preset, validate_parameters
+from .parameter_registry import ParameterError, expand_preset
 from .simulation import (
     PHASE1_ALLOWED_ACTIONS,
     PHASE1_TRANSITION_RULES,
@@ -144,17 +144,29 @@ def _proposal_rows(round_item: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _trace_rows(round_item: dict[str, Any]) -> list[str]:
-    accepted_ids = ", ".join(item["action_id"] for item in round_item["accepted_actions"]) or "採択なし"
-    rows = [f'{round_item["year"]}: {accepted_ids}']
+    rows: list[str] = []
+    cursor = dict(round_item["before"])
+    for accepted in round_item["accepted_actions"]:
+        for axis, attempted_delta in accepted["effects"].items():
+            before = cursor[axis]
+            after = min(100, max(0, before + attempted_delta))
+            applied_delta = after - before
+            cursor[axis] = after
+            rows.append(
+                f'ACTION year={round_item["year"]} agent={accepted["agent_id"]} '
+                f'action={accepted["action_id"]} axis={axis} '
+                f'attempted={attempted_delta:+d} applied={applied_delta:+d}'
+            )
     rows.extend(
         (
-            f'{round_item["year"]}: {event["rule_id"]} {event["axis"]} '
+            f'SATURATION year={round_item["year"]} rule={event["rule_id"]} axis={event["axis"]} '
             f'attempted={event["attempted_delta"]:+d} applied={event["applied_delta"]:+d}'
         )
         for event in round_item.get("transition_saturations", [])
     )
     rows.extend(
-        f'{round_item["year"]}: {event["rule_id"]} {event["axis"]} {event["delta"]:+d}'
+        f'UNCERTAINTY year={round_item["year"]} rule={event["rule_id"]} '
+        f'axis={event["axis"]} applied={event["delta"]:+d}'
         for event in round_item["uncertainty_events"]
     )
     return rows
@@ -231,8 +243,10 @@ class DemoHandler(SimpleHTTPRequestHandler):
             if self._adaptive_ui:
                 body = build_adaptive_demo(parameters, seed=seed)
             else:
-                if parameters is not None:
-                    validate_parameters(parameters)
+                if parameters is not None or seed != 20260829:
+                    raise ParameterError(
+                        "fallback UI cannot represent parameters or a non-default seed"
+                    )
                 body = build_demo_result()
             payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
             self.send_response(200)

@@ -67,6 +67,33 @@ def test_http_rejects_explicit_empty_parameter_object():
         server.server_close()
 
 
+def test_fallback_ui_rejects_supported_shape_inputs_it_cannot_apply(monkeypatch, tmp_path):
+    monkeypatch.setattr(web_demo, "FRONTEND_ROOT", tmp_path / "missing-dist")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DemoHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        for body in (
+            {"parameters": expand_preset("balanced")},
+            {"seed": 17},
+        ):
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{server.server_port}/api/simulate",
+                data=json.dumps(body).encode(),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                urllib.request.urlopen(request, timeout=5)
+            except urllib.error.HTTPError as error:
+                assert error.code == 400
+            else:
+                raise AssertionError("fallback UI must not silently ignore canonical inputs")
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_fallback_ui_route_is_deterministic_even_with_openai_key(monkeypatch, tmp_path):
     monkeypatch.setattr(web_demo, "FRONTEND_ROOT", tmp_path / "missing-dist")
     monkeypatch.setenv("OPENAI_API_KEY", "must-not-be-used")
@@ -123,6 +150,22 @@ def test_displayed_trace_includes_saturation_records():
     joined = "\n".join(row for view in result["rounds"] for row in view["trace"])
     assert any(event["rule_id"] in joined for event in saturations)
     assert "attempted=" in joined and "applied=" in joined
+
+
+def test_displayed_trace_projects_applied_deltas_for_every_accepted_action():
+    result = build_adaptive_demo(expand_preset("balanced"), seed=9)
+    for source, view in zip(result["simulation"]["rounds"], result["rounds"], strict=True):
+        action_rows = [row for row in view["trace"] if row.startswith("ACTION ")]
+        for accepted in source["accepted_actions"]:
+            for axis in accepted["effects"]:
+                assert any(
+                    accepted["agent_id"] in row
+                    and accepted["action_id"] in row
+                    and f"axis={axis}" in row
+                    and "applied=" in row
+                    for row in action_rows
+                )
+        assert all(row.startswith(("ACTION ", "SATURATION ", "UNCERTAINTY ")) for row in view["trace"])
 
 
 def test_constellation_scene_destroys_children_on_redraw():
