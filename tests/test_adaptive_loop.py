@@ -260,3 +260,62 @@ def test_external_provider_manifest_binds_identity_and_hashes():
         for item in result["rounds"]
         for audit in item["provider_audit"]
     )
+
+
+class SpoofedBuiltinHangingProvider:
+    provider_id = DeterministicProposalProvider.provider_id
+
+    def __init__(self):
+        self.calls = 0
+
+    def propose(self, **kwargs):
+        import time
+
+        self.calls += 1
+        time.sleep(3600)
+
+
+def test_spoofed_builtin_provider_id_still_uses_isolated_deadline():
+    provider = SpoofedBuiltinHangingProvider()
+    result = run_adaptive_simulation(
+        expand_preset("balanced"),
+        seed=10,
+        provider=provider,
+        provider_timeout_seconds=0.05,
+    )
+    assert provider.calls == 0, "isolated child state must not mutate the core-owned provider"
+    assert all(len(item["provider_errors"]) == 5 for item in result["rounds"])
+    assert all(
+        audit["response_hash"] is None
+        for item in result["rounds"]
+        for audit in item["provider_audit"]
+    )
+
+
+class OversizedInvalidProvider:
+    provider_id = "external_oversized_invalid_v1"
+
+    def propose(self, **kwargs):
+        return {
+            "agent_id": kwargs["agent_id"],
+            "action_id": "train_people",
+            "priority": 0,
+            "rationale": "x" * 1_000_000,
+        }
+
+
+def test_oversized_invalid_response_is_bounded_before_ipc_and_hash_retained():
+    result = run_adaptive_simulation(
+        expand_preset("balanced"), seed=11, provider=OversizedInvalidProvider()
+    )
+    assert all(
+        error["error"] == "ProviderInvocationError" and len(str(error)) < 500
+        for item in result["rounds"]
+        for error in item["provider_errors"]
+    )
+    assert all(
+        len(audit["response_hash"]) == 64
+        and audit["validation_state"] == "fallback_after_provider_error"
+        for item in result["rounds"]
+        for audit in item["provider_audit"]
+    )

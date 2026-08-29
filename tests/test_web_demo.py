@@ -1,6 +1,6 @@
 from space_civilization.ai_advisor import ActionProposal
 from space_civilization import web_demo
-from space_civilization.simulation import ACTION_EFFECTS, AXES, SimulationError, apply_action_effect, replace_action_effect
+from space_civilization.simulation import ACTION_EFFECTS, AXES, SimulationError, apply_action_effect, replace_action_effect, run_simulation
 from space_civilization.web_demo import build_demo_result
 
 
@@ -47,6 +47,22 @@ def test_adaptive_override_preserves_base_rule_and_uses_distinct_rule(monkeypatc
         assert first["base_rule_id"].startswith(("R-DOM-", "R-INT-", "R-OPEN-"))
         assert first["base_action"]
         assert run["trace"][0]["base_model_rule"] == first["base_rule_id"]
+
+
+def test_domestic_adaptive_override_rejects_forged_base_rule():
+    data = web_demo.load_fixture(web_demo.FIXTURES["domestic_autonomy"])
+    first = data["rounds"][0]
+    first["base_action"] = first["action"]
+    first["base_rule_id"] = "R-DOM-FORGED"
+    first["base_axis_deltas"] = dict(first["axis_deltas"])
+    first["rule_id"] = "R-ADAPT-domestic_autonomy-2026"
+
+    try:
+        run_simulation(data)
+    except SimulationError as error:
+        assert "adaptive base_rule_id invalid" in str(error)
+    else:
+        raise AssertionError("forged domestic base_rule_id must fail closed")
 
 
 def test_replacing_fixture_action_removes_prior_action_effect():

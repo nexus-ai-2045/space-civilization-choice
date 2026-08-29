@@ -35,6 +35,7 @@ _PROVIDER_FALLBACK_ERRORS = (
 # Core-owned deadline so hanging I/O cannot block the deterministic run.
 DEFAULT_PROVIDER_TIMEOUT_SECONDS = 2.0
 _PROVIDER_JOIN_GRACE_SECONDS = 0.5
+_PROVIDER_IPC_MAX_BYTES = 64 * 1024
 
 THREE_PHASE_CHAIN = ("cognitive_cultural", "economic_organizational", "physical_material", "cognitive_cultural")
 
@@ -52,13 +53,36 @@ _ERROR_NAME_TO_TYPE: dict[str, type[BaseException]] = {
 def _provider_process_worker(
     provider: ProposalProvider,
     kwargs: dict[str, Any],
+    provenance_type: str,
     result_queue: multiprocessing.Queue,
 ) -> None:
-    """Isolated worker entrypoint; must stay picklable for spawn contexts."""
+    """Validate untrusted output before sending a bounded envelope over IPC."""
+    response_hash = None
     try:
-        result_queue.put(("ok", provider.propose(**kwargs)))
+        raw = provider.propose(**kwargs)
+        try:
+            response_hash = sha256_json(raw)
+        except (TypeError, ValueError):
+            response_hash = None
+        validated = validate_proposal(
+            raw,
+            expected_agent_id=kwargs["agent_id"],
+            provenance_type=provenance_type,
+        )
+        message = ("ok", validated, response_hash)
     except BaseException as error:  # noqa: BLE001 - resurface exact failure to the core
-        result_queue.put(("err", type(error).__name__, str(error)))
+        message = ("err", type(error).__name__, str(error)[:240], response_hash)
+    if len(pickle.dumps(message)) > _PROVIDER_IPC_MAX_BYTES:
+        message = ("err", "ValueError", "provider IPC envelope exceeded limit", response_hash)
+    result_queue.put(message)
+
+
+class ProviderInvocationError(ValueError):
+    """Bounded provider failure with an optional hash of the received response."""
+
+    def __init__(self, message: str, *, response_hash: str | None = None) -> None:
+        super().__init__(message)
+        self.response_hash = response_hash
 
 
 def _terminate_provider_process(process: multiprocessing.Process) -> None:
@@ -87,14 +111,22 @@ def _propose_with_deadline(
     seed: int,
     state: dict,
     parameters: dict,
-) -> dict:
+) -> tuple[dict, str]:
     """Invoke a provider behind a core-owned deadline; hanging I/O becomes TimeoutError."""
     if timeout_seconds <= 0:
         raise ValueError("provider timeout must be positive")
     # Local deterministic proposals are sync and immediate; skip process hop.
-    if getattr(provider, "provider_id", None) == DeterministicProposalProvider.provider_id:
-        return provider.propose(
+    if type(provider) is DeterministicProposalProvider:
+        raw = provider.propose(
             agent_id=agent_id, year=year, seed=seed, state=state, parameters=parameters
+        )
+        return (
+            validate_proposal(
+                raw,
+                expected_agent_id=agent_id,
+                provenance_type=derive_provenance_type(provider),
+            ),
+            sha256_json(raw),
         )
 
     ctx = _multiprocessing_context()
@@ -108,7 +140,7 @@ def _propose_with_deadline(
     }
     process = ctx.Process(
         target=_provider_process_worker,
-        args=(provider, kwargs, result_queue),
+        args=(provider, kwargs, derive_provenance_type(provider), result_queue),
         daemon=True,
         name=f"scc-provider-{agent_id}-{year}",
     )
@@ -130,12 +162,14 @@ def _propose_with_deadline(
         raise TimeoutError("provider worker exited without a result") from error
 
     if message[0] == "ok":
-        return message[1]
+        return message[1], message[2]
 
-    error_name, error_text = message[1], message[2]
+    error_name, error_text, response_hash = message[1], message[2], message[3]
     error_type = _ERROR_NAME_TO_TYPE.get(error_name, ValueError)
     if error_type is urllib.error.URLError:
         raise urllib.error.URLError(error_text)
+    if error_type is ValueError:
+        raise ProviderInvocationError(error_text, response_hash=response_hash)
     raise error_type(error_text)
 def _initial_axes(parameters: dict[str, int]) -> dict[str, int]:
     return {
@@ -259,7 +293,7 @@ def run_adaptive_simulation(
             }
             request_hash = sha256_json(request_payload)
             try:
-                proposal = _propose_with_deadline(
+                proposal, response_hash = _propose_with_deadline(
                     active_provider,
                     timeout_seconds=provider_timeout_seconds,
                     agent_id=agent_id,
@@ -268,18 +302,13 @@ def run_adaptive_simulation(
                     state=state_view,
                     parameters=parameter_view,
                 )
-                validated = validate_proposal(
-                        proposal,
-                        expected_agent_id=agent_id,
-                        provenance_type=provenance_type,
-                    )
-                proposals.append(validated)
+                proposals.append(proposal)
                 provider_audit.append(
                     {
                         **provider_identity,
                         "agent_id": agent_id,
                         "request_hash": request_hash,
-                        "response_hash": sha256_json(proposal),
+                        "response_hash": response_hash,
                         "validation_state": "accepted_for_run",
                         "fallback_used": False,
                     }
@@ -311,7 +340,7 @@ def run_adaptive_simulation(
                         **provider_identity,
                         "agent_id": agent_id,
                         "request_hash": request_hash,
-                        "response_hash": None,
+                        "response_hash": getattr(error, "response_hash", None),
                         "validation_state": "fallback_after_provider_error",
                         "fallback_used": True,
                         "fallback_provider_id": local_provider.provider_id,

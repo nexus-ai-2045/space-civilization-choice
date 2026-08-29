@@ -186,6 +186,8 @@ def validate_fixture(data: dict[str, Any], *, allow_hackathon_demo_branches: boo
             )
         if "base_action" in item:
             expected_adaptive_rule = f"R-ADAPT-{branch}-{item['year']}"
+            if item.get("base_rule_id") != expected_rule_id:
+                raise SimulationError(f"round {index} adaptive base_rule_id invalid")
             if item.get("rule_id") != expected_adaptive_rule:
                 raise SimulationError(f"round {index} adaptive rule_id invalid")
             if deltas != replace_action_effect(base_action, item["action"], base_deltas):
