@@ -132,6 +132,7 @@ DONE_WHEN_EVIDENCE_CONTRACTS: dict[str, dict[str, Any]] = {
         "artifacts": {
             "test": r"^tests/.+\.py$",
             "trace": r"^(?:evidence|artifacts)/runs/.+\.jsonl?$",
+            "source_manifest": r"^(?:evidence|artifacts)/runs/.+/run-manifest\.json$",
             "event_log": r"^(?:evidence|artifacts)/runs/.+/events\.jsonl$",
         },
     },
@@ -931,6 +932,9 @@ def _validate_done_when_artifact_contents(
             findings,
         )
         trace_path = paths["trace"]
+        source_manifest = _read_json_evidence(
+            paths["source_manifest"], goal_id, "source_manifest", findings
+        )
         if trace_path.suffix == ".jsonl":
             try:
                 records = [
@@ -959,9 +963,12 @@ def _validate_done_when_artifact_contents(
             else None
         )
         valid = isinstance(records, list) and bool(records)
+        valid = valid and isinstance(source_manifest, dict)
         valid = valid and type(declared_count) is int and declared_count == len(records)
         valid = valid and declared_count == len(PHASE1_TRACE_TURN_IDS)
         valid = valid and len(events) == declared_count
+        valid = valid and source_manifest.get("event_count") == len(events)
+        valid = valid and source_manifest.get("event_log_hash") == _sha256_json(events)
         required = ("turn_id", "inputs", "action", "model_rule", "evidence_refs")
         if valid:
             turn_ids = [record.get("turn_id") for record in records if isinstance(record, dict)]

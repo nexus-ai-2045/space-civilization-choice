@@ -232,11 +232,12 @@ class ProjectGoalContractTest(unittest.TestCase):
             repo / "evidence/done-when/REPLAY-001.json",
         )
 
-    def _prepare_trace_evidence(self, repo: Path) -> tuple[Path, Path, Path]:
+    def _prepare_trace_evidence(self, repo: Path) -> tuple[Path, Path, Path, Path]:
         self._copy_contract(repo)
         for relative in (
             "tests/test_phase1_simulation.py",
             "evidence/runs/phase1-domestic-autonomy-20260828-v2/trace.jsonl",
+            "evidence/runs/phase1-domestic-autonomy-20260828-v2/run-manifest.json",
             "evidence/runs/phase1-domestic-autonomy-20260828-v2/events.jsonl",
             "evidence/done-when/TRACE-001.json",
         ):
@@ -247,6 +248,7 @@ class ProjectGoalContractTest(unittest.TestCase):
         self._activate_done_when(repo, "TRACE-001")
         return (
             repo / "evidence/runs/phase1-domestic-autonomy-20260828-v2/trace.jsonl",
+            repo / "evidence/runs/phase1-domestic-autonomy-20260828-v2/run-manifest.json",
             repo / "evidence/runs/phase1-domestic-autonomy-20260828-v2/events.jsonl",
             repo / "evidence/done-when/TRACE-001.json",
         )
@@ -696,7 +698,7 @@ class ProjectGoalContractTest(unittest.TestCase):
     def test_trace_rejects_missing_provenance_fields(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             tmp_path = Path(directory)
-            trace, _event_log, receipt = self._prepare_trace_evidence(tmp_path)
+            trace, _manifest, _event_log, receipt = self._prepare_trace_evidence(tmp_path)
 
             records = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
             for record in records:
@@ -724,7 +726,7 @@ class ProjectGoalContractTest(unittest.TestCase):
     def test_trace_rejects_truncated_records_despite_declared_count(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             tmp_path = Path(directory)
-            trace, _event_log, receipt = self._prepare_trace_evidence(tmp_path)
+            trace, _manifest, _event_log, receipt = self._prepare_trace_evidence(tmp_path)
             records = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
             trace.write_text(json.dumps(records[0], ensure_ascii=False) + "\n", encoding="utf-8")
             payload = json.loads(receipt.read_text(encoding="utf-8"))
@@ -744,7 +746,7 @@ class ProjectGoalContractTest(unittest.TestCase):
     def test_trace_rejects_projection_decoupled_from_event_log(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             tmp_path = Path(directory)
-            trace, event_log, receipt = self._prepare_trace_evidence(tmp_path)
+            trace, _manifest, event_log, receipt = self._prepare_trace_evidence(tmp_path)
             records = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
             records[0]["action"] = "operate_with_domestic_maintenance_chain"
             records[0]["model_rule"] = "R-DOM-04"
@@ -767,10 +769,31 @@ class ProjectGoalContractTest(unittest.TestCase):
         )
         _ = event_log
 
+    def test_trace_rejects_source_manifest_decoupled_from_event_log(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            _trace, manifest, _event_log, receipt = self._prepare_trace_evidence(repo)
+            manifest_payload = json.loads(manifest.read_text(encoding="utf-8"))
+            manifest_payload["event_count"] += 1
+            manifest.write_text(json.dumps(manifest_payload), encoding="utf-8")
+            receipt_payload = json.loads(receipt.read_text(encoding="utf-8"))
+            receipt_payload["artifact_sha256"]["source_manifest"] = hashlib.sha256(
+                _canonical_text_bytes(manifest)
+            ).hexdigest()
+            receipt.write_text(json.dumps(receipt_payload), encoding="utf-8")
+
+            report = MODULE.build_report(repo)
+
+        self.assertFalse(report["contract_valid"])
+        self.assertIn(
+            "trace_result_invalid",
+            {item.get("reason") for item in report["findings"]},
+        )
+
     def test_trace_rejects_noncanonical_axes_even_when_six_are_present(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             tmp_path = Path(directory)
-            trace, _event_log, receipt = self._prepare_trace_evidence(tmp_path)
+            trace, _manifest, _event_log, receipt = self._prepare_trace_evidence(tmp_path)
 
             records = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
             records[0]["axis_deltas"] = {f"arbitrary_{index}": index for index in range(6)}

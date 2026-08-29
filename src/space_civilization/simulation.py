@@ -25,14 +25,22 @@ AGENTS = (
     "research_and_next_generation_alliance",
     "international_partners",
 )
-# Phase 1で許可する行動と、対応する遷移規則。独立な任意組合せは拒否する。
-PHASE1_ACTION_RULES = {
-    "allocate_to_domestic_core_components": "R-DOM-01",
-    "qualify_redundant_component_supply": "R-DOM-02",
-    "expand_maintainer_training": "R-DOM-03",
-    "operate_with_domestic_maintenance_chain": "R-DOM-04",
+# Phase 1の行動を、その意味を実装する規則とbase deltaへfail-closedで束縛する。
+PHASE1_TRANSITION_RULES = {
+    "allocate_to_domestic_core_components": {
+        "rule_id": "R-DOM-01", "axis_deltas": (-2, 8, 1, 4, -3, 1)
+    },
+    "qualify_redundant_component_supply": {
+        "rule_id": "R-DOM-02", "axis_deltas": (3, 7, 0, 2, 1, 1)
+    },
+    "expand_maintainer_training": {
+        "rule_id": "R-DOM-03", "axis_deltas": (2, 3, 1, 8, 0, 2)
+    },
+    "operate_with_domestic_maintenance_chain": {
+        "rule_id": "R-DOM-04", "axis_deltas": (4, 4, -1, 3, -2, 1)
+    },
 }
-PHASE1_ALLOWED_ACTIONS = frozenset(PHASE1_ACTION_RULES)
+PHASE1_ALLOWED_ACTIONS = frozenset(PHASE1_TRANSITION_RULES)
 CLASSIFICATION = {
     "record_kind": "simulated_transition",
     "epistemic_class": "model_assumption",
@@ -64,6 +72,11 @@ def sha256_json(value: Any) -> str:
     return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
 
 
+def deterministic_execution_input_hash(fixture: dict[str, Any]) -> str:
+    """実行入力fixtureのcanonical JSON digestを再計算する。"""
+    return sha256_json(fixture)
+
+
 def load_fixture(path: str | Path) -> dict[str, Any]:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     validate_fixture(data)
@@ -92,11 +105,9 @@ def validate_fixture(data: dict[str, Any]) -> None:
     for index, item in enumerate(data["rounds"], start=1):
         if not item.get("action") or not item.get("rule_id") or not item.get("evidence_ref"):
             raise SimulationError(f"round {index} lacks trace fields")
-        expected_rule = PHASE1_ACTION_RULES.get(item.get("action"))
-        if expected_rule is None:
+        transition_rule = PHASE1_TRANSITION_RULES.get(item.get("action"))
+        if transition_rule is None:
             raise SimulationError(f"round {index} action is not a Phase 1 allowed action")
-        if item.get("rule_id") != expected_rule:
-            raise SimulationError(f"round {index} rule_id does not match action")
         if item.get("actor") not in AGENTS:
             raise SimulationError(f"round {index} actor is not a canonical agent")
         if not isinstance(item.get("exogenous_event"), str) or not item["exogenous_event"].strip():
@@ -106,6 +117,11 @@ def validate_fixture(data: dict[str, Any]) -> None:
         deltas = item.get("axis_deltas", {})
         if set(deltas) != set(AXES) or any(not _is_int(v) for v in deltas.values()):
             raise SimulationError(f"round {index} axis_deltas invalid")
+        expected_deltas = dict(zip(AXES, transition_rule["axis_deltas"], strict=True))
+        if item.get("rule_id") != transition_rule["rule_id"] or deltas != expected_deltas:
+            raise SimulationError(
+                f"round {index} does not match transition rule for action {item['action']}"
+            )
 
 
 def _apply_deltas(axes: dict[str, int], deltas: dict[str, int]) -> dict[str, int]:
@@ -186,7 +202,7 @@ def run_simulation(fixture: dict[str, Any]) -> dict[str, Any]:
     manifest = {
         "scenario_snapshot_id": fixture["scenario_snapshot_id"],
         "scenario_snapshot_hash": scenario_snapshot_hash,
-        "deterministic_execution_input_hash": sha256_json(fixture),
+        "deterministic_execution_input_hash": deterministic_execution_input_hash(fixture),
         "seed": fixture["seed"],
         "model_version": fixture["model_version"],
         "branch_id": fixture["branch"],

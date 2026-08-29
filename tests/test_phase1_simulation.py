@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from space_civilization import (
     SimulationError,
     common_scenario_snapshot,
+    deterministic_execution_input_hash,
     load_fixture,
     run_simulation,
     sha256_json,
@@ -53,7 +54,18 @@ def test_different_seed_changes_seeded_exogenous_stream_and_event_log():
                 fixture["rounds"][0].__setitem__(
                     "action", "qualify_redundant_component_supply"
                 ),
-                fixture["rounds"][0].__setitem__("rule_id", "R-DOM-02"),
+                    fixture["rounds"][0].__setitem__("rule_id", "R-DOM-02"),
+                    fixture["rounds"][0].__setitem__(
+                        "axis_deltas",
+                        {
+                            "access_and_operation": 3,
+                            "industrial_reproduction": 7,
+                            "rule_shaping": 0,
+                            "knowledge_continuity": 2,
+                            "relationship_choice": 1,
+                            "public_legitimacy": 1,
+                        },
+                    ),
             ),
             False,
         ),
@@ -64,20 +76,9 @@ def test_different_seed_changes_seeded_exogenous_stream_and_event_log():
             True,
         ),
         (
-            lambda fixture: fixture["rounds"][0].__setitem__(
-                "axis_deltas",
-                {
-                    axis: 0
-                    for axis in (
-                        "access_and_operation",
-                        "industrial_reproduction",
-                        "rule_shaping",
-                        "knowledge_continuity",
-                        "relationship_choice",
-                        "public_legitimacy",
-                    )
-                },
-            ),
+                lambda fixture: fixture["rounds"][0].__setitem__(
+                    "actor", "research_and_next_generation_alliance"
+                ),
             False,
         ),
     ],
@@ -113,6 +114,15 @@ def test_common_scenario_snapshot_excludes_branch_specific_fields():
         common_scenario_snapshot(second)
     )
     assert sha256_json(first) != sha256_json(second)
+
+
+def test_deterministic_execution_input_hash_recomputes_from_fixture_content():
+    first = load_fixture(FIXTURE)
+    second = load_fixture(FIXTURE)
+    second["rounds"][0]["axis_deltas"]["industrial_reproduction"] += 1
+
+    assert deterministic_execution_input_hash(first) == sha256_json(first)
+    assert deterministic_execution_input_hash(first) != deterministic_execution_input_hash(second)
 
 
 @pytest.mark.parametrize("branch", ["international_integration", "open_platform"])
@@ -198,13 +208,18 @@ def test_fixture_rejects_unknown_action():
         run_simulation(data)
 
 
-def test_fixture_rejects_action_rule_mismatch():
+def test_fixture_rejects_action_rule_or_base_delta_mismatch():
     data = load_fixture(FIXTURE)
     data["rounds"][0]["action"] = "operate_with_domestic_maintenance_chain"
     # Keep R-DOM-01 from the original turn-1 fixture while swapping the action.
     data["rounds"][0]["rule_id"] = "R-DOM-01"
 
-    with pytest.raises(SimulationError, match="rule_id does not match action"):
+    with pytest.raises(SimulationError, match="does not match transition rule"):
+        run_simulation(data)
+
+    data = load_fixture(FIXTURE)
+    data["rounds"][0]["axis_deltas"]["industrial_reproduction"] += 1
+    with pytest.raises(SimulationError, match="does not match transition rule"):
         run_simulation(data)
 
 
@@ -248,9 +263,9 @@ def test_runner_writes_auditable_manifest_and_jsonl_without_overwrite(tmp_path):
     assert duplicate.returncode != 0
 
 
-def test_axis_delta_that_requires_clamping_is_rejected():
+def test_axis_delta_outside_transition_rule_is_rejected_before_execution():
     data = load_fixture(FIXTURE)
     data["rounds"][0]["axis_deltas"]["industrial_reproduction"] = 1000
 
-    with pytest.raises(SimulationError, match="axis out of range after transition"):
+    with pytest.raises(SimulationError, match="does not match transition rule"):
         run_simulation(data)
