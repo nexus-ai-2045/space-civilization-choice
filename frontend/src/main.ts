@@ -10,6 +10,7 @@ let params={...defaults};
 let latest:SimulationResult|null=null;
 let selectedRound=4;
 let game:Phaser.Game|null=null;
+let runGeneration=0;
 
 app.innerHTML=`<header><div><strong>CAUSAL CONSTELLATION</strong><h1>宇宙文明の選択肢を、同じ未来条件で比較する</h1></div><div class="mode">ローカル・マルチエージェントPDCA（4ラウンド）</div><label>シナリオ名<input value="デフォルトシナリオ" aria-label="シナリオ名"></label></header><main><aside class="panel controls"><h2>パラメータを編集</h2><div id="control-list"></div><button id="run">▶ シミュレーションを実行</button><output id="status">実行待ち</output></aside><section class="stage"><div id="game" aria-label="三領域の因果コンステレーション"></div><div class="legend">→ 因果リンク　⋯ フィードバックループ　✦ 選択された介入パス</div><section class="timeline"><h2>シミュレーションタイムライン（年ごと完全PDCA × 4）</h2><div id="rounds"></div></section></section><aside class="panel evidence"><h2>エビデンス＆トレース</h2><div id="current"></div><p id="engine"></p><p id="replay-hash" class="replay-hash"></p><h3>提案と意思決定</h3><div id="proposals"></div><h3>アウトプット指標（6軸）</h3><div id="axes"></div><details><summary>因果トレースを表示</summary><ol id="trace"></ol></details></aside></main><footer>本シミュレーションは仮説的な因果関係に基づく探索的分析であり、実在の未来を保証するものではありません。<span>● ローカル実行モード</span></footer>`;
 
@@ -107,6 +108,7 @@ function render(result:SimulationResult,round=selectedRound){
 }
 
 async function runSimulation(){
+ const generation=++runGeneration;
  const s=document.querySelector('#status')!;
  s.textContent='5主体が4ラウンド協議中…';
  params=normalizeAllocations(params);
@@ -115,10 +117,12 @@ async function runSimulation(){
   const res=await fetch('/api/simulate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({parameters:params,rounds:4})});
   if(!res.ok)throw new Error(String(res.status));
   const result=await res.json() as SimulationResult;
+  if(generation!==runGeneration)return;
   selectedRound=result.round||4;
   render(result,selectedRound);
   s.textContent='ローカル決定論シミュレーション完了';
  }catch(error){
+  if(generation!==runGeneration)return;
   s.textContent=`実行失敗: ${error instanceof Error?error.message:'unknown'}`;
  }
 }

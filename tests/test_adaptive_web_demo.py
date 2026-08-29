@@ -146,3 +146,10 @@ def test_adaptive_view_projects_and_renders_proposal_rationale():
     assert "proposal-rationale" in source
     assert "p.rationale" in source
     assert "rationale:string" in types
+
+
+def test_adaptive_ui_ignores_superseded_simulation_responses():
+    source = (web_demo.REPO_ROOT / "frontend/src/main.ts").read_text(encoding="utf-8")
+    assert "let runGeneration=0" in source
+    assert "const generation=++runGeneration" in source
+    assert source.count("if(generation!==runGeneration)return") >= 2

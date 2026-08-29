@@ -319,3 +319,66 @@ def test_oversized_invalid_response_is_bounded_before_ipc_and_hash_retained():
         for item in result["rounds"]
         for audit in item["provider_audit"]
     )
+
+
+class MetadataObject:
+    def __str__(self):
+        return "metadata-v1"
+
+
+class NonJsonMetadataProvider(SpoofedProvenanceProvider):
+    provider_id = "external_metadata_v1"
+    model_id = MetadataObject()
+    model_version = MetadataObject()
+
+
+def test_non_json_provider_metadata_is_normalized_before_manifest_hashing():
+    result = run_adaptive_simulation(
+        expand_preset("balanced"), seed=12, provider=NonJsonMetadataProvider()
+    )
+    assert result["provider_manifest"] == {
+        "provider_id": "external_metadata_v1",
+        "model_id": "metadata-v1",
+        "model_version": "metadata-v1",
+    }
+    assert len(result["canonical_output_hash"]) == 64
+
+
+class BytesRationaleProvider:
+    provider_id = "external_bytes_v1"
+
+    def propose(self, **kwargs):
+        return {
+            "agent_id": kwargs["agent_id"],
+            "action_id": "train_people",
+            "priority": 0,
+            "rationale": b"not-json-text",
+        }
+
+
+def test_non_json_response_retains_transport_hash_but_not_validated_hash():
+    result = run_adaptive_simulation(
+        expand_preset("balanced"), seed=13, provider=BytesRationaleProvider()
+    )
+    assert all(
+        len(audit["transport_response_hash"]) == 64
+        and audit["response_hash"] == audit["transport_response_hash"]
+        and audit["validated_response_hash"] is None
+        for item in result["rounds"]
+        for audit in item["provider_audit"]
+    )
+
+
+class FalseyProvider(SpoofedProvenanceProvider):
+    provider_id = "external_falsey_v1"
+
+    def __len__(self):
+        return 0
+
+
+def test_falsey_external_provider_is_not_replaced_by_local_provider():
+    result = run_adaptive_simulation(
+        expand_preset("balanced"), seed=14, provider=FalseyProvider()
+    )
+    assert result["provider_manifest"]["provider_id"] == "external_falsey_v1"
+    assert all(not item["provider_errors"] for item in result["rounds"])

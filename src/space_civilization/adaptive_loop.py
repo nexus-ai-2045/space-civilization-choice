@@ -6,6 +6,8 @@ import multiprocessing
 import pickle
 import urllib.error
 from copy import deepcopy
+from dataclasses import dataclass
+from hashlib import sha256
 from multiprocessing.context import BaseContext
 from typing import Any
 
@@ -36,6 +38,7 @@ _PROVIDER_FALLBACK_ERRORS = (
 DEFAULT_PROVIDER_TIMEOUT_SECONDS = 2.0
 _PROVIDER_JOIN_GRACE_SECONDS = 0.5
 _PROVIDER_IPC_MAX_BYTES = 64 * 1024
+_PROVIDER_IDENTITY_MAX_CHARS = 128
 
 THREE_PHASE_CHAIN = ("cognitive_cultural", "economic_organizational", "physical_material", "cognitive_cultural")
 
@@ -50,6 +53,28 @@ _ERROR_NAME_TO_TYPE: dict[str, type[BaseException]] = {
 }
 
 
+@dataclass(frozen=True)
+class ProviderEnvelope:
+    """Only bounded, validated data may cross the provider process boundary."""
+
+    status: str
+    proposal: dict[str, Any] | None
+    error_name: str | None
+    error_text: str | None
+    transport_response_hash: str | None
+    validated_response_hash: str | None
+
+
+def _bounded_identity(value: object, *, fallback: str | None = None) -> str | None:
+    if value is None:
+        return fallback
+    try:
+        text = str(value)
+    except Exception:
+        text = type(value).__name__
+    return text[:_PROVIDER_IDENTITY_MAX_CHARS]
+
+
 def _provider_process_worker(
     provider: ProposalProvider,
     kwargs: dict[str, Any],
@@ -57,32 +82,56 @@ def _provider_process_worker(
     result_queue: multiprocessing.Queue,
 ) -> None:
     """Validate untrusted output before sending a bounded envelope over IPC."""
-    response_hash = None
+    transport_response_hash = None
+    validated_response_hash = None
     try:
         raw = provider.propose(**kwargs)
         try:
-            response_hash = sha256_json(raw)
-        except (TypeError, ValueError):
-            response_hash = None
+            raw_bytes = pickle.dumps(raw, protocol=pickle.HIGHEST_PROTOCOL)
+            transport_response_hash = sha256(raw_bytes).hexdigest()
+        except (pickle.PickleError, AttributeError, TypeError):
+            raw_bytes = b""
         validated = validate_proposal(
             raw,
             expected_agent_id=kwargs["agent_id"],
             provenance_type=provenance_type,
         )
-        message = ("ok", validated, response_hash)
+        validated_response_hash = sha256_json(validated)
+        envelope = ProviderEnvelope(
+            "ok", validated, None, None, transport_response_hash, validated_response_hash
+        )
     except BaseException as error:  # noqa: BLE001 - resurface exact failure to the core
-        message = ("err", type(error).__name__, str(error)[:240], response_hash)
-    if len(pickle.dumps(message)) > _PROVIDER_IPC_MAX_BYTES:
-        message = ("err", "ValueError", "provider IPC envelope exceeded limit", response_hash)
-    result_queue.put(message)
+        envelope = ProviderEnvelope(
+            "err",
+            None,
+            type(error).__name__,
+            str(error)[:240],
+            transport_response_hash,
+            None,
+        )
+    envelope_bytes = pickle.dumps(envelope, protocol=pickle.HIGHEST_PROTOCOL)
+    if len(envelope_bytes) > _PROVIDER_IPC_MAX_BYTES:
+        envelope = ProviderEnvelope(
+            "err", None, "ValueError", "provider IPC envelope exceeded limit",
+            transport_response_hash, None,
+        )
+    result_queue.put(envelope)
 
 
 class ProviderInvocationError(ValueError):
     """Bounded provider failure with an optional hash of the received response."""
 
-    def __init__(self, message: str, *, response_hash: str | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        transport_response_hash: str | None = None,
+        validated_response_hash: str | None = None,
+    ) -> None:
         super().__init__(message)
-        self.response_hash = response_hash
+        self.transport_response_hash = transport_response_hash
+        self.validated_response_hash = validated_response_hash
+        self.response_hash = transport_response_hash  # backwards-compatible audit alias
 
 
 def _terminate_provider_process(process: multiprocessing.Process) -> None:
@@ -111,7 +160,7 @@ def _propose_with_deadline(
     seed: int,
     state: dict,
     parameters: dict,
-) -> tuple[dict, str]:
+) -> tuple[dict, str, str]:
     """Invoke a provider behind a core-owned deadline; hanging I/O becomes TimeoutError."""
     if timeout_seconds <= 0:
         raise ValueError("provider timeout must be positive")
@@ -120,14 +169,15 @@ def _propose_with_deadline(
         raw = provider.propose(
             agent_id=agent_id, year=year, seed=seed, state=state, parameters=parameters
         )
-        return (
-            validate_proposal(
+        validated = validate_proposal(
                 raw,
                 expected_agent_id=agent_id,
                 provenance_type=derive_provenance_type(provider),
-            ),
-            sha256_json(raw),
-        )
+            )
+        transport_hash = sha256(
+            pickle.dumps(raw, protocol=pickle.HIGHEST_PROTOCOL)
+        ).hexdigest()
+        return validated, transport_hash, sha256_json(validated)
 
     ctx = _multiprocessing_context()
     result_queue: multiprocessing.Queue = ctx.Queue(maxsize=1)
@@ -157,19 +207,30 @@ def _propose_with_deadline(
 
     process.join(timeout=_PROVIDER_JOIN_GRACE_SECONDS)
     try:
-        message = result_queue.get_nowait()
+        envelope = result_queue.get_nowait()
     except Exception as error:
         raise TimeoutError("provider worker exited without a result") from error
 
-    if message[0] == "ok":
-        return message[1], message[2]
+    if not isinstance(envelope, ProviderEnvelope):
+        raise ProviderInvocationError("provider returned an invalid IPC envelope")
+    if envelope.status == "ok" and envelope.proposal is not None:
+        return (
+            envelope.proposal,
+            envelope.transport_response_hash,
+            envelope.validated_response_hash,
+        )
 
-    error_name, error_text, response_hash = message[1], message[2], message[3]
+    error_name = envelope.error_name or "ValueError"
+    error_text = envelope.error_text or "provider invocation failed"
     error_type = _ERROR_NAME_TO_TYPE.get(error_name, ValueError)
     if error_type is urllib.error.URLError:
         raise urllib.error.URLError(error_text)
     if error_type is ValueError:
-        raise ProviderInvocationError(error_text, response_hash=response_hash)
+        raise ProviderInvocationError(
+            error_text,
+            transport_response_hash=envelope.transport_response_hash,
+            validated_response_hash=envelope.validated_response_hash,
+        )
     raise error_type(error_text)
 def _initial_axes(parameters: dict[str, int]) -> dict[str, int]:
     return {
@@ -263,11 +324,14 @@ def run_adaptive_simulation(
     if type(seed) is not int:
         raise ValueError("seed must be a strict integer")
     checked = validate_parameters(parameters)
-    active_provider = provider or DeterministicProposalProvider()
+    active_provider = provider if provider is not None else DeterministicProposalProvider()
     provider_identity = {
-        "provider_id": str(getattr(active_provider, "provider_id", type(active_provider).__name__)),
-        "model_id": getattr(active_provider, "model_id", None),
-        "model_version": getattr(active_provider, "model_version", None),
+        "provider_id": _bounded_identity(
+            getattr(active_provider, "provider_id", None),
+            fallback=type(active_provider).__name__,
+        ),
+        "model_id": _bounded_identity(getattr(active_provider, "model_id", None)),
+        "model_version": _bounded_identity(getattr(active_provider, "model_version", None)),
     }
     provenance_type = derive_provenance_type(active_provider)
     local_provider = DeterministicProposalProvider()
@@ -293,7 +357,7 @@ def run_adaptive_simulation(
             }
             request_hash = sha256_json(request_payload)
             try:
-                proposal, response_hash = _propose_with_deadline(
+                proposal, transport_hash, validated_hash = _propose_with_deadline(
                     active_provider,
                     timeout_seconds=provider_timeout_seconds,
                     agent_id=agent_id,
@@ -308,7 +372,9 @@ def run_adaptive_simulation(
                         **provider_identity,
                         "agent_id": agent_id,
                         "request_hash": request_hash,
-                        "response_hash": response_hash,
+                        "response_hash": transport_hash,
+                        "transport_response_hash": transport_hash,
+                        "validated_response_hash": validated_hash,
                         "validation_state": "accepted_for_run",
                         "fallback_used": False,
                     }
@@ -341,6 +407,12 @@ def run_adaptive_simulation(
                         "agent_id": agent_id,
                         "request_hash": request_hash,
                         "response_hash": getattr(error, "response_hash", None),
+                        "transport_response_hash": getattr(
+                            error, "transport_response_hash", None
+                        ),
+                        "validated_response_hash": getattr(
+                            error, "validated_response_hash", None
+                        ),
                         "validation_state": "fallback_after_provider_error",
                         "fallback_used": True,
                         "fallback_provider_id": local_provider.provider_id,
