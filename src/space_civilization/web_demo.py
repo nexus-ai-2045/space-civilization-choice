@@ -143,42 +143,42 @@ def _proposal_rows(round_item: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
-def _trace_rows(round_item: dict[str, Any]) -> list[str]:
+def _trace_rows(
+    records: list[dict[str, Any]], saturations: list[dict[str, Any]]
+) -> list[str]:
     rows: list[str] = []
-    cursor = dict(round_item["before"])
-    for accepted in round_item["accepted_actions"]:
-        for axis, attempted_delta in accepted["effects"].items():
-            before = cursor[axis]
-            after = min(100, max(0, before + attempted_delta))
-            applied_delta = after - before
-            cursor[axis] = after
-            rows.append(
-                f'ACTION year={round_item["year"]} agent={accepted["agent_id"]} '
-                f'action={accepted["action_id"]} axis={axis} '
-                f'attempted={attempted_delta:+d} applied={applied_delta:+d}'
-            )
-    rows.extend(
-        (
-            f'SATURATION year={round_item["year"]} rule={event["rule_id"]} axis={event["axis"]} '
-            f'attempted={event["attempted_delta"]:+d} applied={event["applied_delta"]:+d}'
+    for record in records:
+        prefix = record["kind"].upper()
+        identity = ""
+        if record["kind"] == "action":
+            identity = f' agent={record["agent_id"]} action={record["action_id"]}'
+        else:
+            identity = f' rule={record["rule_id"]}'
+        rows.append(
+            f'{prefix} year={record["year"]}{identity} axis={record["axis"]} '
+            f'attempted={record["attempted_delta"]:+d} '
+            f'applied={record["applied_delta"]:+d}'
         )
-        for event in round_item.get("transition_saturations", [])
-    )
     rows.extend(
-        f'UNCERTAINTY year={round_item["year"]} rule={event["rule_id"]} '
-        f'axis={event["axis"]} applied={event["delta"]:+d}'
-        for event in round_item["uncertainty_events"]
+        f'SATURATION rule={event["rule_id"]} axis={event["axis"]} '
+        f'attempted={event["attempted_delta"]:+d} '
+        f'applied={event["applied_delta"]:+d}'
+        for event in saturations
     )
     return rows
 
 
 def _round_view(round_item: dict[str, Any], round_index: int) -> dict[str, Any]:
+    execution_records = round_item["execution_records"]
     return {
         "round": round_index,
         "year": round_item["year"],
         "proposals": _proposal_rows(round_item),
         "axes": _axes_rows(round_item["after"]),
-        "trace": _trace_rows(round_item),
+        "trace": _trace_rows(
+            execution_records, round_item.get("transition_saturations", [])
+        ),
+        "execution_records": execution_records,
         "accepted_actions": [item["action_id"] for item in round_item["accepted_actions"]],
         "domains": sorted(
             {
@@ -231,6 +231,7 @@ class DemoHandler(SimpleHTTPRequestHandler):
                 raise ParameterError("request object contains unknown fields")
             if request_body.get("rounds", 4) != 4:
                 raise ParameterError("rounds must be 4")
+            seed_supplied = "seed" in request_body
             seed = request_body.get("seed", 20260829)
             if type(seed) is not int:
                 raise ParameterError("seed must be a strict integer")
@@ -243,9 +244,9 @@ class DemoHandler(SimpleHTTPRequestHandler):
             if self._adaptive_ui:
                 body = build_adaptive_demo(parameters, seed=seed)
             else:
-                if parameters is not None or seed != 20260829:
+                if parameters is not None or seed_supplied:
                     raise ParameterError(
-                        "fallback UI cannot represent parameters or a non-default seed"
+                        "fallback UI cannot represent parameters or an explicit seed"
                     )
                 body = build_demo_result()
             payload = json.dumps(body, ensure_ascii=False).encode("utf-8")

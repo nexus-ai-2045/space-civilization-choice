@@ -65,13 +65,27 @@ def _bounded_transition(value: int) -> tuple[int, bool]:
     return bounded, bounded != value
 
 
-def _apply_actions(axes: dict[str, int], accepted: list[dict]) -> tuple[dict[str, int], list[dict]]:
+def _apply_actions(
+    axes: dict[str, int], accepted: list[dict], year: int
+) -> tuple[dict[str, int], list[dict], list[dict]]:
     result = deepcopy(axes)
     saturations = []
+    records = []
     for item in accepted:
         for axis, delta in item["effects"].items():
             before = result[axis]
             result[axis], saturated = _bounded_transition(before + delta)
+            records.append(
+                {
+                    "kind": "action",
+                    "year": year,
+                    "agent_id": item["agent_id"],
+                    "action_id": item["action_id"],
+                    "axis": axis,
+                    "attempted_delta": delta,
+                    "applied_delta": result[axis] - before,
+                }
+            )
             if saturated:
                 saturations.append({"rule_id": "BOUND-ACTION", "axis": axis, "attempted_delta": delta, "applied_delta": result[axis] - before})
     # Close the three-phase loop: visible outcomes feed legitimacy in every round.
@@ -80,12 +94,24 @@ def _apply_actions(axes: dict[str, int], accepted: list[dict]) -> tuple[dict[str
     before_legitimacy = result["public_legitimacy"]
     attempted_delta = (physical_signal + organizational_signal) // 3
     result["public_legitimacy"], saturated = _bounded_transition(before_legitimacy + attempted_delta)
+    records.append(
+        {
+            "kind": "feedback",
+            "year": year,
+            "rule_id": "FEEDBACK-LEGITIMACY",
+            "axis": "public_legitimacy",
+            "attempted_delta": attempted_delta,
+            "applied_delta": result["public_legitimacy"] - before_legitimacy,
+        }
+    )
     if saturated:
         saturations.append({"rule_id": "BOUND-FEEDBACK", "axis": "public_legitimacy", "attempted_delta": attempted_delta, "applied_delta": result["public_legitimacy"] - before_legitimacy})
-    return result, saturations
+    return result, saturations, records
 
 
-def _apply_uncertainty(axes: dict[str, int], parameters: dict[str, int], year: int) -> tuple[dict[str, int], list[dict]]:
+def _apply_uncertainty(
+    axes: dict[str, int], parameters: dict[str, int], year: int
+) -> tuple[dict[str, int], list[dict], list[dict]]:
     """Three bounded external uncertainties produce explicit, traceable shocks."""
     result = deepcopy(axes)
     rules = (
@@ -94,6 +120,7 @@ def _apply_uncertainty(axes: dict[str, int], parameters: dict[str, int], year: i
         ("international_friction", "relationship_choice", "U-FRICTION"),
     )
     events = []
+    records = []
     round_index = ROUNDS.index(year) + 1
     for parameter_id, axis, rule_id in rules:
         severity = parameters[parameter_id]
@@ -101,7 +128,17 @@ def _apply_uncertainty(axes: dict[str, int], parameters: dict[str, int], year: i
         before = result[axis]
         result[axis], saturated = _bounded_transition(before + delta)
         events.append({"parameter_id": parameter_id, "axis": axis, "delta": result[axis] - before, "attempted_delta": delta, "saturated": saturated, "rule_id": rule_id})
-    return result, events
+        records.append(
+            {
+                "kind": "uncertainty",
+                "year": year,
+                "rule_id": rule_id,
+                "axis": axis,
+                "attempted_delta": delta,
+                "applied_delta": result[axis] - before,
+            }
+        )
+    return result, events, records
 
 
 def run_adaptive_simulation(
@@ -180,13 +217,19 @@ def run_adaptive_simulation(
             )
         resources = _available_resources(checked)
         accepted, used = _arbitrate(proposals, resources)
-        axes, transition_saturations = _apply_actions(axes, accepted)
-        axes, uncertainty_events = _apply_uncertainty(axes, checked, year)
+        axes, transition_saturations, action_records = _apply_actions(
+            axes, accepted, year
+        )
+        axes, uncertainty_events, uncertainty_records = _apply_uncertainty(
+            axes, checked, year
+        )
+        execution_records = action_records + uncertainty_records
         item = {
             "year": year, "pdca": ["plan", "do", "check", "act"], "before": before,
             "proposals": proposals, "accepted_actions": accepted, "resources_available": resources,
             "resources_used": used, "after": deepcopy(axes), "chain_id": "cognition-organization-space-feedback-v1",
             "uncertainty_events": uncertainty_events, "transition_saturations": transition_saturations,
+            "execution_records": execution_records,
             "provider_errors": provider_errors,
             "provider_audit": provider_audit,
         }

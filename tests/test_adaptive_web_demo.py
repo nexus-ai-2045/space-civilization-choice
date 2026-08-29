@@ -94,6 +94,31 @@ def test_fallback_ui_rejects_supported_shape_inputs_it_cannot_apply(monkeypatch,
         server.server_close()
 
 
+def test_fallback_ui_rejects_explicit_default_seed_that_differs_from_fixture(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(web_demo, "FRONTEND_ROOT", tmp_path / "missing-dist")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DemoHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.server_port}/api/simulate",
+            data=json.dumps({"seed": 20260829}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            urllib.request.urlopen(request, timeout=5)
+        except urllib.error.HTTPError as error:
+            assert error.code == 400
+        else:
+            raise AssertionError("fallback UI must reject every explicit seed")
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_fallback_ui_route_is_deterministic_even_with_openai_key(monkeypatch, tmp_path):
     monkeypatch.setattr(web_demo, "FRONTEND_ROOT", tmp_path / "missing-dist")
     monkeypatch.setenv("OPENAI_API_KEY", "must-not-be-used")
@@ -154,7 +179,9 @@ def test_displayed_trace_includes_saturation_records():
 
 def test_displayed_trace_projects_applied_deltas_for_every_accepted_action():
     result = build_adaptive_demo(expand_preset("balanced"), seed=9)
-    for source, view in zip(result["simulation"]["rounds"], result["rounds"], strict=True):
+    for source, view in zip(
+        result["simulation"]["rounds"], result["rounds"], strict=True
+    ):
         action_rows = [row for row in view["trace"] if row.startswith("ACTION ")]
         for accepted in source["accepted_actions"]:
             for axis in accepted["effects"]:
@@ -165,7 +192,32 @@ def test_displayed_trace_projects_applied_deltas_for_every_accepted_action():
                     and "applied=" in row
                     for row in action_rows
                 )
-        assert all(row.startswith(("ACTION ", "SATURATION ", "UNCERTAINTY ")) for row in view["trace"])
+        assert all(
+            row.startswith(("ACTION ", "FEEDBACK ", "SATURATION ", "UNCERTAINTY "))
+            for row in view["trace"]
+        )
+
+
+def test_execution_records_include_unsaturated_feedback_and_reconcile_after_state():
+    result = build_adaptive_demo(expand_preset("balanced"), seed=9)
+    feedback_count = 0
+    for source, view in zip(result["simulation"]["rounds"], result["rounds"], strict=True):
+        feedback = [
+            record for record in view["execution_records"]
+            if record["kind"] == "feedback"
+        ]
+        assert len(feedback) == 1
+        feedback_count += 1
+        record = feedback[0]
+        assert record["rule_id"] == "FEEDBACK-LEGITIMACY"
+        assert record["axis"] == "public_legitimacy"
+        assert any(
+            row.startswith("FEEDBACK ")
+            and f'applied={record["applied_delta"]:+d}' in row
+            for row in view["trace"]
+        )
+        assert view["execution_records"] == source["execution_records"]
+    assert feedback_count == 4
 
 
 def test_constellation_scene_destroys_children_on_redraw():

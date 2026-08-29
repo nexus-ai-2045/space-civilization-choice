@@ -62,6 +62,19 @@ def test_external_uncertainties_are_applied_and_traced_each_round():
     )
 
 
+def test_execution_records_are_emitted_at_transition_point_and_reconcile_after():
+    result = run_adaptive_simulation(expand_preset("balanced"), seed=4)
+    for round_item in result["rounds"]:
+        cursor = dict(round_item["before"])
+        kinds = [record["kind"] for record in round_item["execution_records"]]
+        assert kinds.count("feedback") == 1
+        assert kinds.count("uncertainty") == 3
+        assert "saturation" not in kinds
+        for record in round_item["execution_records"]:
+            cursor[record["axis"]] += record["applied_delta"]
+        assert cursor == round_item["after"]
+
+
 def test_all_valid_parameter_boundaries_complete_with_explicit_saturation():
     allocation_ids = {
         "transport",
