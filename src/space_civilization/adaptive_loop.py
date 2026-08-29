@@ -121,7 +121,9 @@ def run_adaptive_simulation(
         )
     if provider_timeout_seconds is not None:
         raise ValueError("provider_timeout_seconds belongs to the future external adapter")
-    active_provider = provider if provider is not None else CORE_PROVIDER_REGISTRY[
+    # A compatible caller argument is only a migration marker. Execution authority
+    # always comes from a fresh instance of the core-owned registry implementation.
+    active_provider = CORE_PROVIDER_REGISTRY[
         DeterministicProposalProvider.provider_id
     ]()
     provider_identity = {

@@ -8,11 +8,16 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from .ai_advisor import propose_action
 from .adaptive_loop import run_adaptive_simulation
 from .comparison import BRANCHES, compare_simulations
 from .parameter_registry import ParameterError, expand_preset, validate_parameters
-from .simulation import PHASE1_TRANSITION_RULES, load_fixture, replace_action_effect, sha256_json
+from .simulation import (
+    PHASE1_ALLOWED_ACTIONS,
+    PHASE1_TRANSITION_RULES,
+    load_fixture,
+    replace_action_effect,
+    sha256_json,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -23,6 +28,21 @@ FIXTURES = {
     "domestic_autonomy": REPO_ROOT / "fixtures/phase1_domestic_autonomy.json",
     "open_platform": REPO_ROOT / "fixtures/phase1_open_coordination.json",
 }
+
+
+def _deterministic_demo_proposal(context: dict[str, Any]) -> dict[str, str | None]:
+    """Return a core-owned proposal without consulting environment or network state."""
+    actions = sorted(PHASE1_ALLOWED_ACTIONS)
+    action = actions[int(sha256_json(context)[:16], 16) % len(actions)]
+    return {
+        "action": action,
+        "rationale": "入力hashからコア所有の許可済み行動を決定しました。",
+        "source": "deterministic_fallback",
+        "model": "",
+        "prompt_version": "deterministic-demo-v1",
+        "validation_state": "accepted_for_run",
+        "fallback_reason": None,
+    }
 
 
 def build_demo_result() -> dict[str, Any]:
@@ -38,25 +58,25 @@ def build_demo_result() -> dict[str, Any]:
             "axes": fixtures[branch]["initial_state"]["axes"],
             "exogenous_event": fixtures[branch]["rounds"][0]["exogenous_event"],
         }
-        proposal = propose_action(context)
+        proposal = _deterministic_demo_proposal(context)
         previous_action = fixtures[branch]["rounds"][0]["action"]
         fixtures[branch]["rounds"][0]["base_action"] = previous_action
         fixtures[branch]["rounds"][0]["base_rule_id"] = fixtures[branch]["rounds"][0]["rule_id"]
         fixtures[branch]["rounds"][0]["base_axis_deltas"] = deepcopy(
             fixtures[branch]["rounds"][0]["axis_deltas"]
         )
-        fixtures[branch]["rounds"][0]["action"] = proposal.action
+        fixtures[branch]["rounds"][0]["action"] = proposal["action"]
         fixtures[branch]["rounds"][0]["rule_id"] = (
             f"R-ADAPT-{branch}-{fixtures[branch]['rounds'][0]['year']}"
         )
         fixtures[branch]["rounds"][0]["axis_deltas"] = replace_action_effect(
-            previous_action, proposal.action, fixtures[branch]["rounds"][0]["axis_deltas"]
+            previous_action, proposal["action"], fixtures[branch]["rounds"][0]["axis_deltas"]
         )
         proposals[branch] = {
-            **proposal.to_dict(),
+            **proposal,
             "record_kind": "action_proposal",
             "epistemic_class": "inference",
-            "provenance_type": "llm" if proposal.source == "openai" else "deterministic_core",
+            "provenance_type": "deterministic_core",
         }
 
     result = compare_simulations(fixtures)

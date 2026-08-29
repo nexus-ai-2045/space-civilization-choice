@@ -1,4 +1,3 @@
-from space_civilization.ai_advisor import ActionProposal
 from space_civilization import web_demo
 from space_civilization.simulation import ACTION_EFFECTS, AXES, SimulationError, apply_action_effect, replace_action_effect, run_simulation
 from space_civilization.web_demo import build_demo_result
@@ -19,23 +18,16 @@ def test_demo_completes_with_deterministic_fallback(monkeypatch):
     assert all(item["validation_state"] == "accepted_for_run" for item in result["ai_proposals"].values())
 
 
-def test_ai_action_changes_the_simulated_state(monkeypatch):
-    def proposal(action):
-        return ActionProposal(
-            action=action,
-            rationale="test",
-            source="openai",
-            model="test-model",
-            prompt_version="test-prompt",
-            validation_state="accepted_for_run",
-        )
-
-    monkeypatch.setattr(web_demo, "propose_action", lambda _context: proposal("expand_maintainer_training"))
-    training = build_demo_result()
-    monkeypatch.setattr(web_demo, "propose_action", lambda _context: proposal("qualify_redundant_component_supply"))
-    supply = build_demo_result()
-
-    assert training["final_axis_comparison"] != supply["final_axis_comparison"]
+def test_demo_proposals_are_core_owned_and_replayable(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "must-not-affect-demo")
+    first = build_demo_result()
+    second = build_demo_result()
+    assert first["demo_hash"] == second["demo_hash"]
+    assert all(
+        proposal["source"] == "deterministic_fallback"
+        and proposal["provenance_type"] == "deterministic_core"
+        for proposal in first["ai_proposals"].values()
+    )
 
 
 def test_adaptive_override_preserves_base_rule_and_uses_distinct_rule(monkeypatch):
@@ -77,6 +69,33 @@ def test_adaptive_provenance_bundle_rejects_partial_fields():
         assert "all present or all absent" in str(error)
     else:
         raise AssertionError("partial adaptive provenance must fail closed")
+
+
+def test_adaptive_provenance_bundle_rejects_null_wrong_type_and_invalid_values():
+    invalid_updates = (
+        {"base_rule_id": None},
+        {"base_action": None},
+        {"base_axis_deltas": None},
+        {"base_rule_id": 7},
+        {"base_action": "not-allowlisted"},
+        {"base_axis_deltas": {axis: False for axis in AXES}},
+    )
+    for update in invalid_updates:
+        data = web_demo.load_fixture(
+            web_demo.FIXTURES["international_integration"],
+            allow_hackathon_demo_branches=True,
+        )
+        first = data["rounds"][0]
+        first["base_rule_id"] = first["rule_id"]
+        first["base_action"] = first["action"]
+        first["base_axis_deltas"] = dict(first["axis_deltas"])
+        first.update(update)
+        try:
+            run_simulation(data, allow_hackathon_demo_branches=True)
+        except SimulationError as error:
+            assert "adaptive provenance" in str(error)
+        else:
+            raise AssertionError(f"invalid adaptive provenance must fail: {update!r}")
 
 
 def test_replacing_fixture_action_removes_prior_action_effect():

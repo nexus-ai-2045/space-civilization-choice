@@ -118,6 +118,20 @@ def test_closed_registry_rejects_arbitrary_python_provider_objects():
         )
 
 
+def test_exact_builtin_instance_is_not_executed_when_supplied_by_caller():
+    supplied = DeterministicProposalProvider()
+
+    def fail_if_called(**_kwargs):
+        raise AssertionError("caller-owned provider instance must not execute")
+
+    supplied.propose = fail_if_called
+    result = run_adaptive_simulation(
+        expand_preset("balanced"), seed=18, provider=supplied
+    )
+    baseline = run_adaptive_simulation(expand_preset("balanced"), seed=18)
+    assert result["canonical_output_hash"] == baseline["canonical_output_hash"]
+
+
 def test_timeout_option_is_deferred_with_external_adapter():
     with pytest.raises(ValueError, match="future external adapter"):
         run_adaptive_simulation(

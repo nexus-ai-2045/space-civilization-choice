@@ -4,6 +4,7 @@ import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
 
+from space_civilization import ai_advisor
 from space_civilization.parameter_registry import expand_preset
 from space_civilization import web_demo
 from space_civilization.web_demo import DemoHandler, build_adaptive_demo
@@ -66,9 +67,15 @@ def test_http_rejects_explicit_empty_parameter_object():
         server.server_close()
 
 
-def test_fallback_ui_route_returns_branch_payload(monkeypatch, tmp_path):
+def test_fallback_ui_route_is_deterministic_even_with_openai_key(monkeypatch, tmp_path):
     monkeypatch.setattr(web_demo, "FRONTEND_ROOT", tmp_path / "missing-dist")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "must-not-be-used")
+
+    def fail_if_network_called(*_args, **_kwargs):
+        raise AssertionError("fallback server must not call the OpenAI transport")
+
+    monkeypatch.setattr(ai_advisor, "_post_response", fail_if_network_called)
+    monkeypatch.setattr(ai_advisor, "propose_action", fail_if_network_called)
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), DemoHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -86,6 +93,7 @@ def test_fallback_ui_route_returns_branch_payload(monkeypatch, tmp_path):
         assert "branches" in payload
         assert "ai_mode" in payload
         assert "ai_proposals" in payload
+        assert payload["ai_mode"] == "deterministic_fallback"
     finally:
         server.shutdown()
         server.server_close()

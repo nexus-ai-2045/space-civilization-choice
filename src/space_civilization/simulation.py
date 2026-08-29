@@ -171,6 +171,20 @@ def validate_fixture(data: dict[str, Any], *, allow_hackathon_demo_branches: boo
             raise SimulationError(
                 f"round {index} adaptive provenance fields must be all present or all absent"
             )
+        if present_adaptive_fields:
+            base_rule_id = item["base_rule_id"]
+            base_action = item["base_action"]
+            base_deltas = item["base_axis_deltas"]
+            if not isinstance(base_rule_id, str) or not base_rule_id.strip():
+                raise SimulationError(f"round {index} adaptive provenance base_rule_id invalid")
+            if not isinstance(base_action, str) or base_action not in PHASE1_ALLOWED_ACTIONS:
+                raise SimulationError(f"round {index} adaptive provenance base_action invalid")
+            if (
+                not isinstance(base_deltas, dict)
+                or set(base_deltas) != set(AXES)
+                or any(not _is_int(value) for value in base_deltas.values())
+            ):
+                raise SimulationError(f"round {index} adaptive provenance base_axis_deltas invalid")
         # 全分岐をそれぞれのcanonical transition ruleへ厳密に束縛する。
         if branch == "domestic_autonomy":
             canonical = PHASE1_TRANSITION_RULES[item.get("base_action", item["action"])]
