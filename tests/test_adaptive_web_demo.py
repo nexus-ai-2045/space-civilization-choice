@@ -290,7 +290,16 @@ def test_displayed_trace_projects_applied_deltas_for_every_accepted_action():
                     for row in action_rows
                 )
         assert all(
-            row.startswith(("ACTION ", "FEEDBACK ", "SATURATION ", "UNCERTAINTY "))
+            row.startswith(
+                (
+                    "ACTION ",
+                    "ACTION_RECONCILIATION ",
+                    "FEEDBACK ",
+                    "FEEDBACK_RECONCILIATION ",
+                    "SATURATION ",
+                    "UNCERTAINTY ",
+                )
+            )
             for row in view["trace"]
         )
 
@@ -353,6 +362,9 @@ def test_adaptive_ui_exposes_replay_hash_and_full_pdca_round_labels():
     assert "setInterval" not in source
     assert "主体間の応答と再提案" in source
     assert "結果リプレイを停止" in source
+    assert "rounds.replaceChildren()" in source
+    assert "button.classList.toggle('active',active)" in source
+    assert "clear('#rounds')" not in source
     responsive = (web_demo.REPO_ROOT / "frontend/src/responsive.css").read_text(encoding="utf-8")
     assert ".timeline {" in responsive
     assert "overflow-x: auto" in responsive

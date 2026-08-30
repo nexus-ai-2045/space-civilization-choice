@@ -4,6 +4,8 @@ import pytest
 
 from space_civilization.adaptive_loop import (
     _apply_actions,
+    _reconcile_action_carries,
+    _truncate_toward_zero,
     _validate_execution_contract,
     run_adaptive_simulation,
 )
@@ -70,6 +72,57 @@ def test_action_carry_is_scoped_to_agent_action_and_axis_for_trace_attribution()
         ("agent-b", "action-b", "access_and_operation"),
         ("__core__", "FEEDBACK-LEGITIMACY", "public_legitimacy"),
     }
+
+
+def test_final_reconciliation_combines_cross_action_remainders_by_axis():
+    axes = {
+        "access_and_operation": 50,
+        "industrial_reproduction": 50,
+        "rule_shaping": 50,
+        "knowledge_continuity": 50,
+        "relationship_choice": 50,
+        "public_legitimacy": 50,
+    }
+    carry = {
+        ("agent-a", "action-a", "access_and_operation"): 8,
+        ("agent-b", "action-b", "access_and_operation"): 8,
+    }
+    result, saturations, records = _reconcile_action_carries(
+        axes, carry, 2040, 1
+    )
+    reconciliation = next(
+        record for record in records if record["kind"] == "action_reconciliation"
+    )
+    assert result["access_and_operation"] == 51
+    assert reconciliation["attempted_delta"] == 1
+    assert reconciliation["carry_before"] == 16
+    assert reconciliation["carry_after"] == 1
+    assert sum(
+        value for key, value in carry.items() if key[2] == "access_and_operation"
+    ) == 1
+    _validate_execution_contract(records, saturations)
+
+
+def test_annualized_action_effects_preserve_axis_totals_after_reconciliation():
+    result = run_adaptive_simulation(expand_preset("balanced"), seed=42)
+    totals: dict[str, dict[str, int]] = {}
+    for item in result["rounds"]:
+        for record in item["execution_records"]:
+            if record["kind"] == "action":
+                bucket = totals.setdefault(
+                    record["axis"], {"base": 0, "attempted": 0}
+                )
+                bucket["base"] += record["base_delta"]
+                bucket["attempted"] += record["attempted_delta"]
+            elif record["kind"] == "action_reconciliation":
+                totals.setdefault(
+                    record["axis"], {"base": 0, "attempted": 0}
+                )["attempted"] += record["attempted_delta"]
+    assert totals
+    for bucket in totals.values():
+        assert bucket["attempted"] == _truncate_toward_zero(
+            bucket["base"] * 4, 15
+        )
 
 
 def test_feedback_carry_preserves_annualized_three_phase_remainders():

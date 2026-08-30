@@ -77,7 +77,9 @@ def _execution_record_id(year: int, index: int) -> str:
 def _validate_execution_contract(records: list[dict], saturations: list[dict]) -> None:
     diagnostic_rule_by_kind = {
         "action": "BOUND-ACTION",
+        "action_reconciliation": "BOUND-ACTION",
         "feedback": "BOUND-FEEDBACK",
+        "feedback_reconciliation": "BOUND-FEEDBACK",
         "uncertainty": "BOUND-UNCERTAINTY",
     }
     record_ids = [record.get("execution_record_id") for record in records]
@@ -184,6 +186,114 @@ def _apply_actions(
                 "execution_record_id": records[-1]["execution_record_id"],
             }
         )
+    return result, saturations, records
+
+
+def _reconcile_action_carries(
+    axes: dict[str, int],
+    carry: dict[tuple[str, str, str], int],
+    year: int,
+    start_index: int,
+) -> tuple[dict[str, int], list[dict], list[dict]]:
+    """Settle cross-action annualization remainders without losing attribution."""
+    result = deepcopy(axes)
+    records: list[dict] = []
+    saturations: list[dict] = []
+    action_keys = [key for key in carry if key[0] != "__core__"]
+    for axis in sorted({key[2] for key in action_keys}):
+        keys = sorted(key for key in action_keys if key[2] == axis)
+        carry_before = sum(carry[key] for key in keys)
+        attempted_delta = _truncate_toward_zero(
+            carry_before, ANNUAL_EFFECT_DENOMINATOR
+        )
+        if attempted_delta == 0:
+            continue
+
+        units_to_consume = abs(attempted_delta) * ANNUAL_EFFECT_DENOMINATOR
+        direction = 1 if attempted_delta > 0 else -1
+        contributors = []
+        for key in keys:
+            available = carry[key] * direction
+            if available <= 0 or units_to_consume == 0:
+                continue
+            consumed = min(available, units_to_consume)
+            carry[key] -= direction * consumed
+            units_to_consume -= consumed
+            contributors.append(
+                {
+                    "agent_id": key[0],
+                    "action_id": key[1],
+                    "carry_units_consumed": direction * consumed,
+                }
+            )
+        if units_to_consume:
+            raise ValueError("action carry reconciliation could not consume target")
+
+        before = result[axis]
+        result[axis], saturated = _bounded_transition(before + attempted_delta)
+        record = {
+            "execution_record_id": _execution_record_id(
+                year, start_index + len(records)
+            ),
+            "kind": "action_reconciliation",
+            "year": year,
+            "agent_id": "__aggregate__",
+            "action_id": "ANNUAL-ACTION-CARRY-RECONCILIATION",
+            "rule_id": "ANNUAL-ACTION-CARRY-RECONCILIATION",
+            "axis": axis,
+            "attempted_delta": attempted_delta,
+            "applied_delta": result[axis] - before,
+            "carry_before": carry_before,
+            "carry_after": sum(carry[key] for key in keys),
+            "contributors": contributors,
+        }
+        records.append(record)
+        if saturated:
+            saturations.append(
+                {
+                    "rule_id": "BOUND-ACTION",
+                    "execution_record_id": record["execution_record_id"],
+                }
+            )
+
+    physical_signal = result["access_and_operation"] - axes["access_and_operation"]
+    organizational_signal = (
+        result["industrial_reproduction"] - axes["industrial_reproduction"]
+    )
+    feedback_key = ("__core__", "FEEDBACK-LEGITIMACY", "public_legitimacy")
+    feedback_carry_before = carry.get(feedback_key, 0)
+    feedback_numerator = (
+        physical_signal + organizational_signal + feedback_carry_before
+    )
+    attempted_feedback = _truncate_toward_zero(feedback_numerator, 3)
+    carry[feedback_key] = feedback_numerator - attempted_feedback * 3
+    if attempted_feedback:
+        before = result["public_legitimacy"]
+        result["public_legitimacy"], saturated = _bounded_transition(
+            before + attempted_feedback
+        )
+        record = {
+            "execution_record_id": _execution_record_id(
+                year, start_index + len(records)
+            ),
+            "kind": "feedback_reconciliation",
+            "year": year,
+            "rule_id": "FEEDBACK-LEGITIMACY",
+            "axis": "public_legitimacy",
+            "attempted_delta": attempted_feedback,
+            "applied_delta": result["public_legitimacy"] - before,
+            "carry_before": feedback_carry_before,
+            "carry_after": carry[feedback_key],
+            "source": "action_reconciliation",
+        }
+        records.append(record)
+        if saturated:
+            saturations.append(
+                {
+                    "rule_id": "BOUND-FEEDBACK",
+                    "execution_record_id": record["execution_record_id"],
+                }
+            )
     return result, saturations, records
 
 
@@ -388,6 +498,17 @@ def run_adaptive_simulation(
         )
         transition_saturations.extend(uncertainty_saturations)
         execution_records = action_records + uncertainty_records
+        if year == ADAPTIVE_YEARS[-1]:
+            axes, reconciliation_saturations, reconciliation_records = (
+                _reconcile_action_carries(
+                    axes,
+                    action_carry,
+                    year,
+                    len(execution_records) + 1,
+                )
+            )
+            transition_saturations.extend(reconciliation_saturations)
+            execution_records.extend(reconciliation_records)
         _validate_execution_contract(execution_records, transition_saturations)
         item = {
             "year": year, "pdca": ["plan", "do", "check", "act"], "before": before,

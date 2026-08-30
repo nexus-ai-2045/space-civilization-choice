@@ -110,18 +110,27 @@ function render(result:SimulationResult,round=selectedRound){
  });
  const trace=clear('#trace');
  (view.trace.length?view.trace:result.trace).forEach(x=>trace.append(el('li','',x)));
- const rounds=clear('#rounds');
  const roundViews=result.rounds?.length?result.rounds:[view];
- roundViews.forEach((roundView,i)=>{
-  const roundNumber=roundView.round||i+1;
-  const b=el('button',`round ${roundNumber===view.round?'active':''}`) as HTMLButtonElement;
-  b.type='button';
-  b.dataset.round=String(roundNumber);
-  b.setAttribute('aria-label',`${roundView.year}年、年次${roundNumber}の結果を表示`);
-  b.setAttribute('aria-current',roundNumber===view.round?'step':'false');
-  b.append(el('b','',String(roundView.year)),el('span','',`年次 ${roundNumber} · Plan→Do→Check→Act`));
-  b.addEventListener('click',()=>{window.clearTimeout(replayTimer);document.querySelector('#status')!.textContent=`結果リプレイを停止・${roundView.year}年を表示`;if(latest)render(latest,roundNumber)});
-  rounds.append(b);
+ const rounds=document.querySelector('#rounds')!;
+ const expectedRounds=roundViews.map((roundView,i)=>String(roundView.round||i+1));
+ const existingRounds=Array.from(rounds.querySelectorAll<HTMLButtonElement>('button.round'));
+ if(existingRounds.length!==expectedRounds.length||existingRounds.some((button,i)=>button.dataset.round!==expectedRounds[i])){
+  rounds.replaceChildren();
+  roundViews.forEach((roundView,i)=>{
+   const roundNumber=roundView.round||i+1;
+   const b=el('button','round') as HTMLButtonElement;
+   b.type='button';
+   b.dataset.round=String(roundNumber);
+   b.setAttribute('aria-label',`${roundView.year}年、年次${roundNumber}の結果を表示`);
+   b.append(el('b','',String(roundView.year)),el('span','',`年次 ${roundNumber} · Plan→Do→Check→Act`));
+   b.addEventListener('click',()=>{window.clearTimeout(replayTimer);document.querySelector('#status')!.textContent=`結果リプレイを停止・${roundView.year}年を表示`;if(latest)render(latest,roundNumber)});
+   rounds.append(b);
+  });
+ }
+ rounds.querySelectorAll<HTMLButtonElement>('button.round').forEach(button=>{
+  const active=button.dataset.round===String(view.round);
+  button.classList.toggle('active',active);
+  button.setAttribute('aria-current',active?'step':'false');
  });
  publishScene(view);
 }
