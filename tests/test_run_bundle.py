@@ -17,6 +17,8 @@ from space_civilization.run_bundle import (
     FIXTURE_ALLOWLIST,
     build_run_bundle,
     canonical_bundle_json,
+    load_strict_fixture_json,
+    load_strict_json,
     verify_run_bundle,
 )
 from space_civilization.simulation import sha256_json
@@ -506,3 +508,116 @@ def test_cli_verify_allows_noncanonical_whitespace_only(tmp_path):
         text=True,
     )
     assert completed.returncode == 0, completed.stderr
+
+
+def test_loaders_convert_deep_nesting_to_value_error(tmp_path):
+    path = tmp_path / "deep.json"
+    path.write_text("[" * 100000 + "]" * 100000, encoding="utf-8")
+    with pytest.raises(ValueError, match="nesting is too deep"):
+        load_strict_json(path)
+    with pytest.raises(ValueError, match="nesting is too deep"):
+        load_strict_fixture_json(path)
+
+
+def test_verifier_converts_deeply_nested_bundle_to_value_error():
+    bundle = build_run_bundle(ROOT)
+    deep: list = []
+    for _ in range(100000):
+        deep = [deep]
+    bundle["event_stream"] = deep
+    with pytest.raises(ValueError, match="nesting is too deep"):
+        verify_run_bundle(bundle, ROOT)
+
+
+@pytest.mark.parametrize("agents", (None, 1, True, []))
+def test_generation_and_verification_reject_nonobject_agents_fixture(tmp_path, agents):
+    for ref in FIXTURE_ALLOWLIST.values():
+        target = tmp_path / ref
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / ref, target)
+    fixture = tmp_path / FIXTURE_ALLOWLIST["domestic_autonomy"]
+    payload = json.loads(fixture.read_text(encoding="utf-8"))
+    payload["initial_state"]["agents"] = agents
+    fixture.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="fixture agents must be a JSON object"):
+        build_run_bundle(tmp_path)
+
+    bundle = build_run_bundle(ROOT)
+    with pytest.raises(ValueError, match="fixture agents must be a JSON object"):
+        verify_run_bundle(bundle, tmp_path)
+
+
+def test_fixture_loader_rejects_depth_that_fails_during_serialization(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "fixture.json"
+    path.write_text('{"accepted_extra": {}}', encoding="utf-8")
+    parsed = {"accepted_extra": {}}
+
+    def fake_loads(*args, **kwargs):
+        return parsed
+
+    def fake_dumps(value, *args, **kwargs):
+        if value is parsed:
+            raise RecursionError("fixture nesting")
+        return json.dumps(value, *args, **kwargs)
+
+    monkeypatch.setattr("space_civilization.run_bundle.json.loads", fake_loads)
+    monkeypatch.setattr("space_civilization.run_bundle.json.dumps", fake_dumps)
+    with pytest.raises(ValueError, match="fixture JSON nesting is too deep"):
+        load_strict_fixture_json(path)
+
+
+def test_fixture_loader_rejects_depth_before_downstream_deepcopy(tmp_path):
+    nested: dict = {}
+    for _ in range(300):
+        nested = {"child": nested}
+    payload = json.loads(
+        (ROOT / FIXTURE_ALLOWLIST["domestic_autonomy"]).read_text(encoding="utf-8")
+    )
+    payload["initial_state"]["accepted_extra"] = nested
+    path = tmp_path / "deep-but-parseable-fixture.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="fixture JSON nesting is too deep"):
+        load_strict_fixture_json(path)
+
+
+@pytest.mark.parametrize(
+    "rounds",
+    (None, 1, True, {}, [None], [{}]),
+)
+def test_malformed_rounds_keep_the_value_error_contract(tmp_path, rounds):
+    for ref in FIXTURE_ALLOWLIST.values():
+        target = tmp_path / ref
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / ref, target)
+    fixture = tmp_path / FIXTURE_ALLOWLIST["domestic_autonomy"]
+    payload = json.loads(fixture.read_text(encoding="utf-8"))
+    payload["rounds"] = rounds
+    fixture.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError):
+        build_run_bundle(tmp_path)
+
+
+@pytest.mark.parametrize("value", (None, 1, True, []))
+@pytest.mark.parametrize("field", ("axes", "axis_deltas", "base_axis_deltas"))
+def test_nonobject_axis_containers_keep_the_value_error_contract(
+    tmp_path, field, value
+):
+    for ref in FIXTURE_ALLOWLIST.values():
+        target = tmp_path / ref
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / ref, target)
+    fixture = tmp_path / FIXTURE_ALLOWLIST["domestic_autonomy"]
+    payload = json.loads(fixture.read_text(encoding="utf-8"))
+    if field == "axes":
+        payload["initial_state"][field] = value
+    elif field == "base_axis_deltas":
+        payload["rounds"][0]["base_rule_id"] = payload["rounds"][0]["rule_id"]
+        payload["rounds"][0]["base_action"] = payload["rounds"][0]["action"]
+        payload["rounds"][0][field] = value
+    else:
+        payload["rounds"][0][field] = value
+    fixture.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError):
+        build_run_bundle(tmp_path)
