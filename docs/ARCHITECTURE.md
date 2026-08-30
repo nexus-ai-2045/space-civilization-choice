@@ -11,7 +11,7 @@ flowchart TB
   API --> CORE[Python 決定論的コア]
   CORE --> RULES[版管理された規則・fixtures]
   CORE --> LOG[追記型イベント台帳]
-  API -. 明示的に有効化 .-> LLM[LLM提案アダプター]
+  API -. 後続lane .-> LLM[別process JSON/HTTP提案アダプター]
   LLM --> VALIDATE[構造・許可行動・予算検証]
   VALIDATE --> CORE
   SOURCES[公開根拠台帳] --> CORE
@@ -27,7 +27,8 @@ fixtureだけで再生できることを最初の実装条件とする。
 
 ### LLM提案アダプター
 
-MVP必須ではない。導入時は単一エージェントから始め、交渉案と理由を構造化出力で返す。
+MVP coreには未実装である。導入時は別processのbounded JSON/HTTP境界とし、単一エージェントから始め、
+交渉案と理由を構造化出力で返す。任意のPython provider objectをcore内で実行しない。
 ファイル、shell、外部送信、状態の直接変更権限は持たせない。API keyはブラウザへ置かず、
 ローカルまたはサーバー側の環境変数から読む。実行前に利用者が明示的に有効化する。
 

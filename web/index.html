@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Space Civilization Choice</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main>
+    <p class="eyebrow">HACKATHON SIMULATOR MVP</p>
+    <h1>宇宙文明の選択肢を、同じ未来条件で比較する</h1>
+    <p>AIが許可済み政策を提案し、決定論コアが3分岐×4ラウンドを検証・実行します。</p>
+    <button id="run">AIシミュレーションを実行</button>
+    <p id="status" role="status">実行待ち</p>
+    <section id="summary" hidden></section>
+    <section id="branches" class="grid" aria-live="polite"></section>
+    <details id="trace" hidden><summary>因果トレースと監査hash</summary><pre></pre></details>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

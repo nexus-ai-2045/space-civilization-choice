@@ -15,8 +15,9 @@
 </div>
 
 > [!IMPORTANT]
-> 現在はハッカソン応募候補の**Phase 1実装版**です。国内自立型の決定論的fixtureだけを
-> 実行できます。三分岐比較やUIは未実装で、政府・JAXA・主催者の公式見解でもありません。
+> 現在はハッカソン用の**ローカル適応型シミュレーターMVP**です。Phase 1の決定論コアに加え、
+> 20パラメータ・5主体・4ラウンドPDCAと因果トレースをローカル実行できます。
+> BRANCH-001の三分岐完成や公開承認は未達で、政府・JAXA・主催者の公式見解ではありません。
 
 ## 目的
 
@@ -110,9 +111,9 @@ flowchart LR
 |---|---|---|
 | **0 公開設計** | ゴール、仕様、ADR、根拠台帳、安全境界 | **main公開済み／運用契約更新はreview待ち** |
 | **1 決定論的fixture** | 状態schema、event log、同一seed replay | **完了条件達成（一分岐replay＋trace）** |
-| **2 三分岐比較** | 共通外生event、六観測軸、感度分析 | 未着手 |
-| **3 UI** | 分岐比較、モデル内因果trace、証拠台帳 | 未着手 |
-| **4 限定LLM** | schema検証された行動提案 | 未着手 |
+| **2 適応型比較** | 20入力、5主体、共通外生event、六観測軸 | **ローカルMVP実装／BRANCH-001・感度分析は残務** |
+| **3 UI** | 因果盤、parameter操作、提案採否、trace | **Causal Constellation実装** |
+| **4 外部provider** | schema検証された行動提案 | **後続JSON/HTTP adapterへ延期／外部接続なし** |
 | **5 demo評価** | 人間レビュー、説明可能性eval | 未着手 |
 
 Phase 1として、国内自立型の1 branch × 4 round fixtureをLLMなしで再生し、同一入力の
@@ -139,14 +140,20 @@ canonical output hash一致と六軸deltaのmodel_internal traceまで実装し�
 
 ### ローカル検査
 
-プロダクトは未実装ですが、ゴール契約と公開境界は検査できます。
+ゴール契約、決定論コア、適応型PDCA、ローカルWebデモを検査・実行できます。
 クリーンなcloneでは、CIと同じpinned依存を入れてから検査してください。
 
 ```powershell
 py -3.13 -m pip install --disable-pip-version-check -r requirements-dev.txt
+$env:PYTHONPATH = 'src'
 py -3.13 -m pytest -q
 py -3.13 scripts/check_project_goal.py --json
 py -3.13 scripts/run_phase1_fixture.py
+Push-Location frontend
+npm ci
+npm run build
+Pop-Location
+py -3.13 scripts/run_hackathon_demo.py
 py -3.13 scripts/check_operational_adoption.py --json
 
 $ratchet = Join-Path $env:APPDATA 'Python\Python313\Scripts\ai-ratchet-gate.exe'
@@ -154,8 +161,10 @@ $ratchet = Join-Path $env:APPDATA 'Python\Python313\Scripts\ai-ratchet-gate.exe'
 ```
 
 fixture runnerはmanifest、4件のevent、event log hash、canonical output hash、model_internal
-traceをJSONで返します。これは一分岐の再現性とtraceだけを示し、三分岐比較、プロダクトMVPの完成、
-公開許可を意味しません。
+traceをJSONで返します。ブラウザで`http://127.0.0.1:8000`を開き、適応型シミュレーションも
+実行できます。現在のMVP coreは組み込み決定論providerだけを許可し、外部AIやAPI keyは不要です。
+外部AIは後続の別process JSON/HTTP adapterとして接続します。状態遷移の単一writerはローカル決定論コアです。
+これはBRANCH-001完成、プロダクトMVP完成、公開・応募・政策提言の許可を意味しません。
 
 ## 制約
 

@@ -1,0 +1,16 @@
+{
+  "scenario_snapshot_id": "jp-space-choice-2026-phase1-v1",
+  "model_version": "phase1-rule-model-v1",
+  "seed": 20260828,
+  "branch": "open_platform",
+  "initial_state": {
+    "axes": {"access_and_operation": 40, "industrial_reproduction": 35, "rule_shaping": 30, "knowledge_continuity": 45, "relationship_choice": 40, "public_legitimacy": 50},
+    "agents": {"policy_allocator": {"capacity": 50}, "domestic_exploration_alliance": {"capacity": 45}, "transport_and_components_alliance": {"capacity": 35}, "research_and_next_generation_alliance": {"capacity": 40}, "international_partners": {"capacity": 55}}
+  },
+  "rounds": [
+    {"year": 2026, "actor": "policy_allocator", "action": "allocate_to_domestic_core_components", "exogenous_event": "budget_focus_required", "rule_id": "R-OPEN-01", "evidence_ref": "model-assumption:phase1-open-governance", "axis_deltas": {"access_and_operation": 4, "industrial_reproduction": 3, "rule_shaping": 6, "knowledge_continuity": 5, "relationship_choice": 4, "public_legitimacy": 5}},
+    {"year": 2030, "actor": "transport_and_components_alliance", "action": "qualify_redundant_component_supply", "exogenous_event": "single_supplier_disruption", "rule_id": "R-OPEN-02", "evidence_ref": "model-assumption:phase1-open-interface", "axis_deltas": {"access_and_operation": 5, "industrial_reproduction": 4, "rule_shaping": 5, "knowledge_continuity": 3, "relationship_choice": 4, "public_legitimacy": 3}},
+    {"year": 2035, "actor": "research_and_next_generation_alliance", "action": "expand_maintainer_training", "exogenous_event": "experienced_workforce_retirement", "rule_id": "R-OPEN-03", "evidence_ref": "model-assumption:phase1-open-knowledge", "axis_deltas": {"access_and_operation": 3, "industrial_reproduction": 3, "rule_shaping": 4, "knowledge_continuity": 7, "relationship_choice": 3, "public_legitimacy": 4}},
+    {"year": 2040, "actor": "domestic_exploration_alliance", "action": "operate_with_domestic_maintenance_chain", "exogenous_event": "international_interface_revision", "rule_id": "R-OPEN-04", "evidence_ref": "model-assumption:phase1-open-operation", "axis_deltas": {"access_and_operation": 4, "industrial_reproduction": 3, "rule_shaping": 5, "knowledge_continuity": 4, "relationship_choice": 4, "public_legitimacy": 4}}
+  ]
+}
