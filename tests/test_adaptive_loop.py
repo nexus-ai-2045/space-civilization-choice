@@ -136,17 +136,26 @@ def test_execution_record_contract_covers_uncertainty_identity_and_all_clamps():
 
 @pytest.mark.parametrize(
     "mutation",
-    ("missing_id", "duplicate_id", "dangling", "missing_diagnostic", "unclamped_diagnostic"),
+    (
+        "missing_id",
+        "duplicate_id",
+        "dangling",
+        "missing_diagnostic",
+        "unclamped_diagnostic",
+        "wrong_diagnostic_kind",
+    ),
 )
 def test_execution_record_reference_contract_rejects_invalid_graph(mutation):
     records = [
         {
             "execution_record_id": "2026-E01",
+            "kind": "uncertainty",
             "attempted_delta": -3,
             "applied_delta": -1,
         },
         {
             "execution_record_id": "2026-E02",
+            "kind": "action",
             "attempted_delta": 1,
             "applied_delta": 1,
         },
@@ -164,10 +173,12 @@ def test_execution_record_reference_contract_rejects_invalid_graph(mutation):
         diagnostics[0]["execution_record_id"] = "2026-E99"
     elif mutation == "missing_diagnostic":
         diagnostics.clear()
-    else:
+    elif mutation == "unclamped_diagnostic":
         diagnostics.append(
             {"rule_id": "BOUND-ACTION", "execution_record_id": "2026-E02"}
         )
+    else:
+        diagnostics[0]["rule_id"] = "BOUND-ACTION"
     with pytest.raises(ValueError):
         _validate_execution_contract(records, diagnostics)
 

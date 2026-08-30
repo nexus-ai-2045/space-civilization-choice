@@ -70,6 +70,11 @@ def _execution_record_id(year: int, index: int) -> str:
 
 
 def _validate_execution_contract(records: list[dict], saturations: list[dict]) -> None:
+    diagnostic_rule_by_kind = {
+        "action": "BOUND-ACTION",
+        "feedback": "BOUND-FEEDBACK",
+        "uncertainty": "BOUND-UNCERTAINTY",
+    }
     record_ids = [record.get("execution_record_id") for record in records]
     if any(not isinstance(record_id, str) or not record_id for record_id in record_ids):
         raise ValueError("execution record ID is missing")
@@ -92,6 +97,12 @@ def _validate_execution_contract(records: list[dict], saturations: list[dict]) -
     }
     if set(references) != clamped_ids:
         raise ValueError("execution clamp diagnostics are incomplete")
+    records_by_id = {record["execution_record_id"]: record for record in records}
+    for diagnostic in saturations:
+        record = records_by_id[diagnostic["execution_record_id"]]
+        expected_rule = diagnostic_rule_by_kind.get(record.get("kind"))
+        if expected_rule is None or diagnostic["rule_id"] != expected_rule:
+            raise ValueError("saturation diagnostic rule does not match execution kind")
 
 
 def _apply_actions(
