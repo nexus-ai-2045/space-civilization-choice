@@ -17,6 +17,8 @@ from space_civilization.run_bundle import (
     FIXTURE_ALLOWLIST,
     build_run_bundle,
     canonical_bundle_json,
+    load_strict_fixture_json,
+    load_strict_json,
     verify_run_bundle,
 )
 from space_civilization.simulation import sha256_json
@@ -506,3 +508,39 @@ def test_cli_verify_allows_noncanonical_whitespace_only(tmp_path):
         text=True,
     )
     assert completed.returncode == 0, completed.stderr
+
+
+def test_loaders_convert_deep_nesting_to_value_error(tmp_path):
+    path = tmp_path / "deep.json"
+    path.write_text("[" * 100000 + "]" * 100000, encoding="utf-8")
+    with pytest.raises(ValueError, match="nesting is too deep"):
+        load_strict_json(path)
+    with pytest.raises(ValueError, match="nesting is too deep"):
+        load_strict_fixture_json(path)
+
+
+def test_verifier_converts_deeply_nested_bundle_to_value_error():
+    bundle = build_run_bundle(ROOT)
+    deep: list = []
+    for _ in range(100000):
+        deep = [deep]
+    bundle["event_stream"] = deep
+    with pytest.raises(ValueError, match="nesting is too deep"):
+        verify_run_bundle(bundle, ROOT)
+
+
+def test_generation_and_verification_reject_agents_array_fixture(tmp_path):
+    for ref in FIXTURE_ALLOWLIST.values():
+        target = tmp_path / ref
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / ref, target)
+    fixture = tmp_path / FIXTURE_ALLOWLIST["domestic_autonomy"]
+    payload = json.loads(fixture.read_text(encoding="utf-8"))
+    payload["initial_state"]["agents"] = sorted(payload["initial_state"]["agents"])
+    fixture.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="fixture agents must be a JSON object"):
+        build_run_bundle(tmp_path)
+
+    bundle = build_run_bundle(ROOT)
+    with pytest.raises(ValueError, match="fixture agents must be a JSON object"):
+        verify_run_bundle(bundle, tmp_path)

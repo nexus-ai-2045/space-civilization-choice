@@ -86,20 +86,23 @@ def _without_insignificant_json_whitespace(text: str) -> str:
 def load_strict_json(path: str | Path) -> Any:
     """bundle JSONを重複キー・非有限数なしで一度だけ読み込む。"""
     text = Path(path).read_text(encoding="utf-8")
-    parsed = json.loads(
-        text,
-        object_pairs_hook=reject_duplicate_json_pairs,
-        parse_constant=reject_nonfinite_json_constant,
-        parse_float=parse_finite_bundle_float,
-        parse_int=parse_canonical_json_int,
-    )
-    canonical = json.dumps(
-        parsed,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        allow_nan=False,
-    )
+    try:
+        parsed = json.loads(
+            text,
+            object_pairs_hook=reject_duplicate_json_pairs,
+            parse_constant=reject_nonfinite_json_constant,
+            parse_float=parse_finite_bundle_float,
+            parse_int=parse_canonical_json_int,
+        )
+        canonical = json.dumps(
+            parsed,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except RecursionError as error:
+        raise ValueError("bundle JSON nesting is too deep") from error
     if _without_insignificant_json_whitespace(text) != canonical:
         raise ValueError("bundle contains non-canonical JSON token spelling or key order")
     return parsed
@@ -107,13 +110,16 @@ def load_strict_json(path: str | Path) -> Any:
 
 def load_strict_fixture_json(path: str | Path) -> Any:
     """integer-only fixture JSONを一度だけ読み込む。"""
-    return json.loads(
-        Path(path).read_text(encoding="utf-8"),
-        object_pairs_hook=reject_duplicate_json_pairs,
-        parse_constant=reject_nonfinite_json_constant,
-        parse_float=reject_fixture_float_token,
-        parse_int=parse_canonical_json_int,
-    )
+    try:
+        return json.loads(
+            Path(path).read_text(encoding="utf-8"),
+            object_pairs_hook=reject_duplicate_json_pairs,
+            parse_constant=reject_nonfinite_json_constant,
+            parse_float=reject_fixture_float_token,
+            parse_int=parse_canonical_json_int,
+        )
+    except RecursionError as error:
+        raise ValueError("fixture JSON nesting is too deep") from error
 
 
 def _fixture_shared_contract(fixture: dict[str, Any]) -> dict[str, Any]:
@@ -127,6 +133,8 @@ def _fixture_shared_contract(fixture: dict[str, Any]) -> dict[str, Any]:
     if type(seed) is not int:
         raise ValueError("fixture seed must be a strict integer")
     agents = fixture["initial_state"]["agents"]
+    if not isinstance(agents, dict):
+        raise ValueError("fixture agents must be a JSON object")
     if any(
         not isinstance(agent, dict) or type(agent.get("capacity")) is not int
         for agent in agents.values()
@@ -301,7 +309,11 @@ def verify_run_bundle(bundle: Any, repo_root: str | Path) -> None:
             raise ValueError("fixture order or branch is invalid")
         refs[expected_branch] = fixture["ref"]
     expected = build_run_bundle(repo_root, refs)
-    if canonical_json(top) != canonical_json(expected):
+    try:
+        actual = canonical_json(top)
+    except RecursionError as error:
+        raise ValueError("run bundle nesting is too deep") from error
+    if actual != canonical_json(expected):
         raise ValueError("run bundle does not match the canonical runtime replay")
 
 
