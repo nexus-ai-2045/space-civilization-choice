@@ -61,15 +61,48 @@ def parse_canonical_json_int(value: str) -> int:
     return parsed
 
 
+def _without_insignificant_json_whitespace(text: str) -> str:
+    """文字列内を保持したままJSONの構文上無意味な空白だけを除去する。"""
+    compact: list[str] = []
+    in_string = False
+    escaped = False
+    for character in text:
+        if in_string:
+            compact.append(character)
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+        elif character == '"':
+            in_string = True
+            compact.append(character)
+        elif not character.isspace():
+            compact.append(character)
+    return "".join(compact)
+
+
 def load_strict_json(path: str | Path) -> Any:
     """bundle JSONを重複キー・非有限数なしで一度だけ読み込む。"""
-    return json.loads(
-        Path(path).read_text(encoding="utf-8"),
+    text = Path(path).read_text(encoding="utf-8")
+    parsed = json.loads(
+        text,
         object_pairs_hook=reject_duplicate_json_pairs,
         parse_constant=reject_nonfinite_json_constant,
         parse_float=parse_finite_bundle_float,
         parse_int=parse_canonical_json_int,
     )
+    canonical = json.dumps(
+        parsed,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    if _without_insignificant_json_whitespace(text) != canonical:
+        raise ValueError("bundle contains non-canonical JSON token spelling or key order")
+    return parsed
 
 
 def load_strict_fixture_json(path: str | Path) -> Any:

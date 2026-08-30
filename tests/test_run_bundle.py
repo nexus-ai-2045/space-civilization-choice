@@ -470,6 +470,31 @@ def test_cli_verify_rejects_negative_zero_integer_token(tmp_path):
     assert "non-canonical JSON integer" in completed.stderr
 
 
+@pytest.mark.parametrize(
+    ("original", "alternate"),
+    (
+        ("meta-security-run-bundle/v1", "meta-security-run-bundle\\/v1"),
+        ("international_integration", "international_\\u0069ntegration"),
+    ),
+)
+def test_cli_verify_rejects_noncanonical_string_token_spelling(
+    tmp_path, original, alternate
+):
+    text = canonical_bundle_json(build_run_bundle(ROOT)).replace(
+        f'"{original}"', f'"{alternate}"', 1
+    )
+    path = tmp_path / "alternate-string-token.json"
+    path.write_text(text, encoding="utf-8")
+    completed = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/run_bundle.py"), "--verify", str(path)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode != 0
+    assert "non-canonical JSON token spelling or key order" in completed.stderr
+
+
 def test_cli_verify_allows_noncanonical_whitespace_only(tmp_path):
     text = canonical_bundle_json(build_run_bundle(ROOT)).replace(": ", " :   ")
     path = tmp_path / "whitespace.json"
