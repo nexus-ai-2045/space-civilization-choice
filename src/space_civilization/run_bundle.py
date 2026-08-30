@@ -7,7 +7,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
 
 from .comparison import BRANCHES, compare_simulations
-from .simulation import load_fixture, sha256_json
+from .simulation import canonical_json, sha256_json, validate_fixture
 
 
 BUNDLE_SCHEMA = "meta-security-run-bundle/v1"
@@ -17,6 +17,24 @@ FIXTURE_ALLOWLIST = {
     "domestic_autonomy": "fixtures/phase1_domestic_autonomy.json",
     "open_platform": "fixtures/phase1_open_coordination.json",
 }
+
+
+def reject_duplicate_json_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """JSON objectの重複キーを全階層で拒否する。"""
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
+def load_strict_json(path: str | Path) -> Any:
+    """重複キーを許さず、ファイルを一度だけ読み込む。"""
+    return json.loads(
+        Path(path).read_text(encoding="utf-8"),
+        object_pairs_hook=reject_duplicate_json_pairs,
+    )
 
 
 def _validated_fixture_paths(
@@ -50,12 +68,13 @@ def build_run_bundle(
     root = Path(repo_root)
     refs = dict(FIXTURE_ALLOWLIST if fixture_refs is None else fixture_refs)
     paths = _validated_fixture_paths(root, refs)
-    fixtures = {
-        branch: load_fixture(
-            paths[branch], allow_hackathon_demo_branches=True
-        )
-        for branch in BRANCHES
-    }
+    fixtures: dict[str, dict[str, Any]] = {}
+    for branch in BRANCHES:
+        fixture = load_strict_json(paths[branch])
+        if not isinstance(fixture, dict):
+            raise ValueError("fixture must be a JSON object")
+        validate_fixture(fixture, allow_hackathon_demo_branches=True)
+        fixtures[branch] = fixture
     comparison = compare_simulations(fixtures)
     request_content = {
         "schema": "meta-security-run-request/v1",
@@ -162,7 +181,7 @@ def verify_run_bundle(bundle: Any, repo_root: str | Path) -> None:
             raise ValueError("fixture order or branch is invalid")
         refs[expected_branch] = fixture["ref"]
     expected = build_run_bundle(repo_root, refs)
-    if top != expected:
+    if canonical_json(top) != canonical_json(expected):
         raise ValueError("run bundle does not match the canonical runtime replay")
 
 

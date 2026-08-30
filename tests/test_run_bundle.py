@@ -138,6 +138,45 @@ def test_verifier_rejects_noncanonical_bundle(mutation):
         verify_run_bundle(bundle, ROOT)
 
 
+@pytest.mark.parametrize(
+    ("path", "replacement"),
+    (
+        (("event_stream", "records", 0, "sequence"), True),
+        (("event_stream", "records", 0, "sequence"), 1.0),
+        (
+            (
+                "event_stream",
+                "records",
+                0,
+                "event",
+                "axis_deltas",
+                "industrial_reproduction",
+            ),
+            True,
+        ),
+        (
+            (
+                "event_stream",
+                "records",
+                0,
+                "event",
+                "axis_deltas",
+                "industrial_reproduction",
+            ),
+            1.0,
+        ),
+    ),
+)
+def test_verifier_rejects_equal_but_differently_typed_json_values(path, replacement):
+    bundle = build_run_bundle(ROOT)
+    target = bundle
+    for part in path[:-1]:
+        target = target[part]
+    target[path[-1]] = replacement
+    with pytest.raises(ValueError):
+        verify_run_bundle(bundle, ROOT)
+
+
 def test_verifier_rejects_fixture_drift(tmp_path):
     for ref in FIXTURE_ALLOWLIST.values():
         target = tmp_path / ref
@@ -149,6 +188,24 @@ def test_verifier_rejects_fixture_drift(tmp_path):
     payload["rounds"][0]["evidence_ref"] += "-drift"
     fixture.write_text(json.dumps(payload), encoding="utf-8")
     with pytest.raises(ValueError):
+        verify_run_bundle(bundle, tmp_path)
+
+
+def test_generation_and_verification_reject_duplicate_fixture_keys(tmp_path):
+    for ref in FIXTURE_ALLOWLIST.values():
+        target = tmp_path / ref
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / ref, target)
+    fixture = tmp_path / FIXTURE_ALLOWLIST["domestic_autonomy"]
+    original = fixture.read_text(encoding="utf-8")
+    fixture.write_text(
+        original.replace("{", '{"seed": 999,', 1), encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="duplicate JSON key: seed"):
+        build_run_bundle(tmp_path)
+
+    bundle = build_run_bundle(ROOT)
+    with pytest.raises(ValueError, match="duplicate JSON key: seed"):
         verify_run_bundle(bundle, tmp_path)
 
 
