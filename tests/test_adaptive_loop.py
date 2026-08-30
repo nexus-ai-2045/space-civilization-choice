@@ -3,11 +3,15 @@ from copy import deepcopy
 import pytest
 
 from space_civilization.adaptive_loop import (
+    _apply_actions,
+    _reconcile_action_carries,
+    _truncate_toward_zero,
     _validate_execution_contract,
     run_adaptive_simulation,
 )
 from space_civilization.parameter_registry import expand_preset
 from space_civilization.providers import DeterministicProposalProvider, derive_provenance_type
+from space_civilization.simulation import ROUNDS
 
 
 class ExternalPythonProvider:
@@ -17,18 +21,146 @@ class ExternalPythonProvider:
         raise AssertionError("closed MVP core must never execute external objects")
 
 
-def test_five_agents_repeat_pdca_for_four_rounds():
+def test_five_agents_interact_each_year_from_2026_through_2040():
+    assert ROUNDS == (2026, 2030, 2035, 2040)
     result = run_adaptive_simulation(expand_preset("balanced"), seed=42)
-    assert len(result["rounds"]) == 4
+    assert len(result["rounds"]) == 15
     assert all(len(item["proposals"]) == 5 for item in result["rounds"])
-    assert [item["year"] for item in result["rounds"]] == [2026, 2030, 2035, 2040]
+    assert all(len(item["initial_proposals"]) == 5 for item in result["rounds"])
+    assert all(len(item["responses"]) == 5 for item in result["rounds"])
+    assert all(len(item["reproposals"]) == 5 for item in result["rounds"])
+    assert [item["year"] for item in result["rounds"]] == list(range(2026, 2041))
+    assert all(item["proposals"] == item["reproposals"] for item in result["rounds"])
+    assert all(
+        response["responder_agent_id"] != response["target_agent_id"]
+        for item in result["rounds"]
+        for response in item["responses"]
+    )
     assert all(item["pdca"] == ["plan", "do", "check", "act"] for item in result["rounds"])
-    assert result["three_phase_chain"] == [
-        "cognitive_cultural",
-        "economic_organizational",
-        "physical_material",
-        "cognitive_cultural",
+    assert result["three_phase_chain"] == ["cognitive_cultural", "economic_organizational", "physical_material", "cognitive_cultural"]
+
+
+def test_annualized_action_effects_do_not_prematurely_saturate_axes():
+    result = run_adaptive_simulation(expand_preset("balanced"), seed=42)
+    assert all(0 < value < 100 for value in result["final_axes"].values())
+    assert any(
+        record["kind"] == "action" and record["carry_after"] != 0
+        for item in result["rounds"]
+        for record in item["execution_records"]
+    )
+
+
+def test_action_carry_is_scoped_to_agent_action_and_axis_for_trace_attribution():
+    axes = {
+        "access_and_operation": 50,
+        "industrial_reproduction": 50,
+        "rule_shaping": 50,
+        "knowledge_continuity": 50,
+        "relationship_optionality": 50,
+        "public_legitimacy": 50,
+    }
+    carry = {}
+    accepted = [
+        {"agent_id": "agent-a", "action_id": "action-a", "effects": {"access_and_operation": 2}},
+        {"agent_id": "agent-b", "action_id": "action-b", "effects": {"access_and_operation": 2}},
     ]
+    _, _, records = _apply_actions(axes, accepted, 2026, carry)
+    action_records = [record for record in records if record["kind"] == "action"]
+    assert [record["carry_before"] for record in action_records] == [0, 0]
+    assert set(carry) == {
+        ("agent-a", "action-a", "access_and_operation"),
+        ("agent-b", "action-b", "access_and_operation"),
+        ("__core__", "FEEDBACK-LEGITIMACY", "public_legitimacy"),
+    }
+
+
+def test_final_reconciliation_combines_cross_action_remainders_by_axis():
+    axes = {
+        "access_and_operation": 50,
+        "industrial_reproduction": 50,
+        "rule_shaping": 50,
+        "knowledge_continuity": 50,
+        "relationship_choice": 50,
+        "public_legitimacy": 50,
+    }
+    carry = {
+        ("agent-a", "action-a", "access_and_operation"): 8,
+        ("agent-b", "action-b", "access_and_operation"): 8,
+    }
+    result, saturations, records = _reconcile_action_carries(
+        axes, carry, 2040, 1
+    )
+    reconciliation = next(
+        record for record in records if record["kind"] == "action_reconciliation"
+    )
+    assert result["access_and_operation"] == 51
+    assert reconciliation["attempted_delta"] == 1
+    assert reconciliation["carry_before"] == 16
+    assert reconciliation["carry_after"] == 1
+    assert sum(
+        value for key, value in carry.items() if key[2] == "access_and_operation"
+    ) == 1
+    _validate_execution_contract(records, saturations)
+
+
+def test_annualized_action_effects_preserve_axis_totals_after_reconciliation():
+    result = run_adaptive_simulation(expand_preset("balanced"), seed=42)
+    totals: dict[str, dict[str, int]] = {}
+    for item in result["rounds"]:
+        for record in item["execution_records"]:
+            if record["kind"] == "action":
+                bucket = totals.setdefault(
+                    record["axis"], {"base": 0, "attempted": 0}
+                )
+                bucket["base"] += record["base_delta"]
+                bucket["attempted"] += record["attempted_delta"]
+            elif record["kind"] == "action_reconciliation":
+                totals.setdefault(
+                    record["axis"], {"base": 0, "attempted": 0}
+                )["attempted"] += record["attempted_delta"]
+    assert totals
+    for bucket in totals.values():
+        assert bucket["attempted"] == _truncate_toward_zero(
+            bucket["base"] * 4, 15
+        )
+
+
+def test_feedback_carry_preserves_annualized_three_phase_remainders():
+    axes = {
+        "access_and_operation": 50,
+        "industrial_reproduction": 50,
+        "rule_shaping": 50,
+        "knowledge_continuity": 50,
+        "relationship_optionality": 50,
+        "public_legitimacy": 50,
+    }
+    carry = {}
+    accepted = [{
+        "agent_id": "agent-a",
+        "action_id": "action-a",
+        "effects": {"access_and_operation": 4, "industrial_reproduction": 4},
+    }]
+    first, _, first_records = _apply_actions(axes, accepted, 2026, carry)
+    second, _, second_records = _apply_actions(first, accepted, 2027, carry)
+    first_feedback = next(record for record in first_records if record["kind"] == "feedback")
+    second_feedback = next(record for record in second_records if record["kind"] == "feedback")
+    assert first_feedback["carry_after"] == 2
+    assert second_feedback["carry_before"] == 2
+    assert first_feedback["attempted_delta"] + second_feedback["attempted_delta"] == 1
+
+
+def test_progress_events_are_ordered_and_end_with_completion():
+    events = []
+    result = run_adaptive_simulation(
+        expand_preset("balanced"), seed=42, progress_callback=events.append
+    )
+    assert events[0] == {"event": "year_started", "year": 2026}
+    assert events[-1] == {
+        "event": "simulation_completed",
+        "year": 2040,
+        "canonical_output_hash": result["canonical_output_hash"],
+    }
+    assert [event["year"] for event in events if event["event"] == "year_completed"] == list(range(2026, 2041))
 
 
 def test_replay_is_deterministic_and_seed_changes_run():
@@ -65,6 +197,77 @@ def test_external_uncertainties_are_applied_and_traced_each_round():
         for item in result["rounds"]
         for event in item["uncertainty_events"]
     )
+
+
+@pytest.mark.parametrize("severity", [13, 50, 100])
+def test_annual_uncertainty_preserves_legacy_four_round_total(severity):
+    parameters = expand_preset("balanced")
+    parameters.update(
+        {
+            "launch_cost_pressure": severity,
+            "supply_disruption": severity,
+            "international_friction": severity,
+        }
+    )
+    result = run_adaptive_simulation(parameters, seed=4)
+    expected = -sum(
+        (severity * round_index) // 125
+        for round_index in range(1, len(ROUNDS) + 1)
+    )
+    totals = {
+        parameter_id: sum(
+            record["attempted_delta"]
+            for item in result["rounds"]
+            for record in item["execution_records"]
+            if record["kind"] == "uncertainty"
+            and record["parameter_id"] == parameter_id
+        )
+        for parameter_id in (
+            "launch_cost_pressure",
+            "supply_disruption",
+            "international_friction",
+        )
+    }
+    assert set(totals.values()) == {expected}
+
+
+def test_final_carry_reconciliation_preserves_action_feedback_uncertainty_order():
+    parameters = expand_preset("balanced")
+    for key in (
+        "transport",
+        "autonomy",
+        "life_support",
+        "energy",
+        "people_research",
+        "international_connection",
+        "open_platform",
+    ):
+        parameters[key] = 0
+    parameters.update(
+        {
+            "domestic_supply": 100,
+            "technology_readiness": 0,
+            "industrial_capacity": 0,
+            "domestic_procurement": 100,
+            "dependency_tolerance": 0,
+            "launch_cost_pressure": 100,
+            "supply_disruption": 100,
+            "international_friction": 100,
+        }
+    )
+    result = run_adaptive_simulation(parameters, seed=4)
+    final_round = result["rounds"][-1]
+    kinds = [record["kind"] for record in final_round["execution_records"]]
+    assert kinds.index("action_reconciliation") < kinds.index("feedback")
+    assert kinds.index("feedback") < kinds.index("uncertainty")
+    assert final_round["before"]["relationship_choice"] == 0
+    assert final_round["after"]["relationship_choice"] == 0
+    relationship_records = [
+        record
+        for record in final_round["execution_records"]
+        if record["axis"] == "relationship_choice"
+    ]
+    assert [record["applied_delta"] for record in relationship_records] == [1, -1]
 
 
 def test_execution_records_are_emitted_at_transition_point_and_reconcile_after():

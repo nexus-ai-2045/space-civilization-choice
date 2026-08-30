@@ -4,23 +4,102 @@ import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
 
+import pytest
+
 from space_civilization import ai_advisor
 from space_civilization.parameter_registry import expand_preset
 from space_civilization import web_demo
 from space_civilization.web_demo import DemoHandler, build_adaptive_demo
 
 
-def test_adaptive_demo_exposes_local_engine_and_four_rounds():
+def test_adaptive_demo_exposes_local_engine_and_annual_rounds():
     result = build_adaptive_demo(expand_preset("balanced"), seed=9)
 
     assert result["decision_engine"] == "deterministic_local_v1"
-    assert len(result["simulation"]["rounds"]) == 4
-    assert len(result["rounds"]) == 4
+    assert len(result["simulation"]["rounds"]) == 15
+    assert len(result["rounds"]) == 15
     assert result["rounds"][0]["year"] == 2026
     assert result["rounds"][-1]["year"] == 2040
     assert len(result["proposals"]) == 5
     assert len(result["axes"]) == 6
     assert all("domains" in item for item in result["rounds"])
+    assert all(len(item["interactions"]) == 5 for item in result["rounds"])
+    assert all(
+        {"responder_agent_id", "target_agent_id", "stance", "initial_action", "final_action", "final_priority"}
+        <= set(interaction)
+        for item in result["rounds"]
+        for interaction in item["interactions"]
+    )
+
+
+def test_stream_endpoint_emits_honest_annual_progress_and_final_result():
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DemoHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.server_port}/api/simulate/stream",
+            data=json.dumps({"parameters": expand_preset("balanced"), "rounds": 15, "seed": 9}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:
+            assert response.headers["Content-Type"].startswith("application/x-ndjson")
+            events = [json.loads(line) for line in response]
+        assert events[0] == {"event": "year_started", "year": 2026}
+        assert events[-1]["event"] == "simulation_completed"
+        assert len(events[-1]["result"]["rounds"]) == 15
+        assert [item["year"] for item in events if item["event"] == "year_completed"] == list(range(2026, 2041))
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_stream_endpoint_rejects_invalid_parameters_before_ndjson_headers():
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DemoHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.server_port}/api/simulate/stream",
+            data=json.dumps({"parameters": {"unknown": 1}, "rounds": 15}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(request, timeout=10)
+        assert exc_info.value.code == 400
+        assert exc_info.value.headers["Content-Type"] == "application/json"
+        assert json.loads(exc_info.value.read()) == {"error": "invalid_simulation_request"}
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_stream_endpoint_emits_terminal_failure_event_after_headers(monkeypatch):
+    monkeypatch.setattr(
+        web_demo,
+        "run_adaptive_simulation",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DemoHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.server_port}/api/simulate/stream",
+            data=json.dumps({"rounds": 15}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:
+            events = [json.loads(line) for line in response]
+        assert events == [
+            {"event": "simulation_failed", "error": "simulation_failed"}
+        ]
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def test_http_rejects_unknown_request_fields():
@@ -40,6 +119,26 @@ def test_http_rejects_unknown_request_fields():
             assert error.code == 400
         else:
             raise AssertionError("unknown fields must fail closed")
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_fallback_batch_route_preserves_four_round_contract(monkeypatch):
+    monkeypatch.setattr(web_demo, "adaptive_frontend_available", lambda: False)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DemoHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.server_port}/api/simulate",
+            data=json.dumps({"rounds": 4}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:
+            assert response.status == 200
+            assert len(json.load(response)["branches"]) == 3
     finally:
         server.shutdown()
         server.server_close()
@@ -217,7 +316,16 @@ def test_displayed_trace_projects_applied_deltas_for_every_accepted_action():
                     for row in action_rows
                 )
         assert all(
-            row.startswith(("ACTION ", "FEEDBACK ", "SATURATION ", "UNCERTAINTY "))
+            row.startswith(
+                (
+                    "ACTION ",
+                    "ACTION_RECONCILIATION ",
+                    "FEEDBACK ",
+                    "FEEDBACK_RECONCILIATION ",
+                    "SATURATION ",
+                    "UNCERTAINTY ",
+                )
+            )
             for row in view["trace"]
         )
 
@@ -241,7 +349,7 @@ def test_execution_records_include_unsaturated_feedback_and_reconcile_after_stat
             for row in view["trace"]
         )
         assert view["execution_records"] == source["execution_records"]
-    assert feedback_count == 4
+    assert feedback_count == 15
 
 
 def test_uncertainty_trace_projects_parameter_identity_for_every_record():
@@ -275,6 +383,20 @@ def test_adaptive_ui_exposes_replay_hash_and_full_pdca_round_labels():
     assert "replay-hash" in source
     assert "Plan→Do→Check→Act" in source
     assert "年ごと完全PDCA" in source
+    assert "AbortController" in source
+    assert "reader.cancel()" in source
+    assert "setInterval" not in source
+    assert "主体間の応答と再提案" in source
+    assert "結果リプレイを停止" in source
+    assert "rounds.replaceChildren()" in source
+    assert "button.classList.toggle('active',active)" in source
+    assert "clear('#rounds')" not in source
+    assert "event.event==='simulation_failed'" in source
+    types = (web_demo.REPO_ROOT / "frontend/src/types.ts").read_text(encoding="utf-8")
+    assert "{event:'simulation_failed';error:string}" in types
+    responsive = (web_demo.REPO_ROOT / "frontend/src/responsive.css").read_text(encoding="utf-8")
+    assert ".timeline {" in responsive
+    assert "overflow-x: auto" in responsive
     assert "['計画 (Plan)','実行 (Do)','評価 (Check)','改善 (Act)']" not in source
 
 

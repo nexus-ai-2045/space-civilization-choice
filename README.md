@@ -16,7 +16,8 @@
 
 > [!IMPORTANT]
 > 現在はハッカソン用の**ローカル適応型シミュレーターMVP**です。Phase 1の決定論コアに加え、
-> 20パラメータ・5主体・4ラウンドPDCAと因果トレースをローカル実行できます。
+> 20パラメータ・5主体で、適応型Webは2026〜2040年の15年次PDCA、固定比較fixtureは
+> 2026 / 2030 / 2035 / 2040の4時点PDCAと因果トレースをローカル実行できます。
 > BRANCH-001の三分岐完成や公開承認は未達で、政府・JAXA・主催者の公式見解ではありません。
 
 ## 目的
@@ -93,7 +94,7 @@ flowchart LR
 ```mermaid
 flowchart LR
   P1["1. 事実と未知を確認"] --> P2["2. 技術ツリーを選択"]
-  P2 --> P3["3. 4ラウンドを実行"]
+  P2 --> P3["3. 適応型Webは15年次を実行"]
   P3 --> P4["4. 三分岐を比較"]
   P4 --> P5["5. 結果からモデル内因果へ戻る"]
 
@@ -115,6 +116,10 @@ flowchart LR
 | **3 UI** | 因果盤、parameter操作、提案採否、trace | **Causal Constellation実装** |
 | **4 外部provider** | schema検証された行動提案 | **後続JSON/HTTP adapterへ延期／外部接続なし** |
 | **5 demo評価** | 人間レビュー、説明可能性eval | 未着手 |
+
+適応型Webは各年に5主体の初期提案、相互応答、再提案、資源調停、状態更新を行います。
+`POST /api/simulate/stream`のNDJSON eventで実計算の進行を通知し、完了後の画面遷移は
+「結果リプレイ」として区別します。固定比較fixtureと`meta-security-run-bundle/v1`は4時点のままです。
 
 Phase 1として、国内自立型の1 branch × 4 round fixtureをLLMなしで再生し、同一入力の
 canonical output hash一致と六軸deltaのmodel_internal traceまで実装しました。次は同じschemaで

@@ -11,6 +11,7 @@ ADRは、設計上の重要判断と、採らなかった選択肢、見直し�
 - [ADR-0007: 外部基盤の採用レベルと運用証拠を分離する](0007-operational-adoption-contract.md)
 - [ADR-0008: ハッカソン向け限定AIデモを前倒しする](0008-hackathon-ai-demo-slice.md)
 - [ADR-0009: ローカル優先の適応型シミュレーションエンジンを正本にする](0009-local-first-adaptive-simulation-engine.md)
+- [ADR-0010: 適応型Webだけを年次化し、実計算progressをstreamする](0010-annual-adaptive-interaction-stream.md)
 
 状態は`proposed`、`accepted`、`superseded`、`rejected`を使う。重要なモデル境界を変更する場合は、
 既存ADRを書き換えず、新しいADRで置き換える。
