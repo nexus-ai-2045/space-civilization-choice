@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
 
@@ -34,13 +35,65 @@ def reject_nonfinite_json_constant(value: str) -> Any:
     raise ValueError(f"non-finite JSON number: {value}")
 
 
+def reject_fixture_float_token(value: str) -> Any:
+    """fixture契約に存在しないJSON float tokenを変換前に拒否する。"""
+    raise ValueError(f"fixture JSON number must be an integer: {value}")
+
+
+def parse_finite_bundle_float(value: str) -> float:
+    """core eventの有限floatだけを許可し、overflowを拒否する。"""
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError(f"non-finite JSON number: {value}")
+    return parsed
+
+
 def load_strict_json(path: str | Path) -> Any:
-    """重複キーを許さず、ファイルを一度だけ読み込む。"""
+    """bundle JSONを重複キー・非有限数なしで一度だけ読み込む。"""
     return json.loads(
         Path(path).read_text(encoding="utf-8"),
         object_pairs_hook=reject_duplicate_json_pairs,
         parse_constant=reject_nonfinite_json_constant,
+        parse_float=parse_finite_bundle_float,
     )
+
+
+def load_strict_fixture_json(path: str | Path) -> Any:
+    """integer-only fixture JSONを一度だけ読み込む。"""
+    return json.loads(
+        Path(path).read_text(encoding="utf-8"),
+        object_pairs_hook=reject_duplicate_json_pairs,
+        parse_constant=reject_nonfinite_json_constant,
+        parse_float=reject_fixture_float_token,
+    )
+
+
+def _fixture_shared_contract(fixture: dict[str, Any]) -> dict[str, Any]:
+    scenario_snapshot_id = fixture.get("scenario_snapshot_id")
+    model_version = fixture.get("model_version")
+    seed = fixture.get("seed")
+    if not isinstance(scenario_snapshot_id, str) or not scenario_snapshot_id.strip():
+        raise ValueError("fixture scenario_snapshot_id must be a non-empty string")
+    if not isinstance(model_version, str) or not model_version.strip():
+        raise ValueError("fixture model_version must be a non-empty string")
+    if type(seed) is not int:
+        raise ValueError("fixture seed must be a strict integer")
+    agents = fixture["initial_state"]["agents"]
+    if any(
+        not isinstance(agent, dict) or type(agent.get("capacity")) is not int
+        for agent in agents.values()
+    ):
+        raise ValueError("fixture agent capacity must be a strict integer")
+    return {
+        "scenario_snapshot_id": scenario_snapshot_id,
+        "model_version": model_version,
+        "seed": seed,
+        "initial_state": fixture["initial_state"],
+        "rounds": [
+            {"year": item["year"], "exogenous_event": item["exogenous_event"]}
+            for item in fixture["rounds"]
+        ],
+    }
 
 
 def _validated_fixture_paths(
@@ -76,11 +129,17 @@ def build_run_bundle(
     paths = _validated_fixture_paths(root, refs)
     fixtures: dict[str, dict[str, Any]] = {}
     for branch in BRANCHES:
-        fixture = load_strict_json(paths[branch])
+        fixture = load_strict_fixture_json(paths[branch])
         if not isinstance(fixture, dict):
             raise ValueError("fixture must be a JSON object")
         validate_fixture(fixture, allow_hackathon_demo_branches=True)
+        _fixture_shared_contract(fixture)
         fixtures[branch] = fixture
+    shared_contract_hashes = {
+        sha256_json(_fixture_shared_contract(fixtures[branch])) for branch in BRANCHES
+    }
+    if len(shared_contract_hashes) != 1:
+        raise ValueError("branch fixtures must share one exact canonical input contract")
     comparison = compare_simulations(fixtures)
     scenario_snapshot_hashes = {
         comparison["branches"][branch]["manifest"]["scenario_snapshot_hash"]

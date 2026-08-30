@@ -246,7 +246,66 @@ def test_generation_rejects_python_equal_but_noncanonical_shared_snapshot(tmp_pa
         ),
         encoding="utf-8",
     )
-    with pytest.raises(ValueError, match="canonical scenario snapshot hash"):
+    loaded = {
+        branch: json.loads((tmp_path / ref).read_text(encoding="utf-8"))
+        for branch, ref in FIXTURE_ALLOWLIST.items()
+    }
+    compare_simulations(loaded)  # Python equality alone accepts 50 == 50.0.
+    with pytest.raises(ValueError, match="fixture JSON number must be an integer"):
+        build_run_bundle(tmp_path)
+
+
+@pytest.mark.parametrize("token", ("1.5", "1e2", "1e999", "2e999"))
+def test_generation_rejects_every_fixture_float_token(tmp_path, token):
+    for ref in FIXTURE_ALLOWLIST.values():
+        target = tmp_path / ref
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / ref, target)
+    fixture = tmp_path / FIXTURE_ALLOWLIST["domestic_autonomy"]
+    original = fixture.read_text(encoding="utf-8")
+    fixture.write_text(
+        original.replace('"public_legitimacy": 50', f'"public_legitimacy": {token}', 1),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="fixture JSON number must be an integer"):
+        build_run_bundle(tmp_path)
+
+
+@pytest.mark.parametrize("invalid", (True, 7, ""))
+def test_generation_rejects_invalid_model_version(tmp_path, invalid):
+    for ref in FIXTURE_ALLOWLIST.values():
+        target = tmp_path / ref
+        target.parent.mkdir(parents=True, exist_ok=True)
+        payload = json.loads((ROOT / ref).read_text(encoding="utf-8"))
+        payload["model_version"] = invalid
+        target.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="model_version"):
+        build_run_bundle(tmp_path)
+
+
+def test_generation_rejects_cross_branch_model_version_drift(tmp_path):
+    for ref in FIXTURE_ALLOWLIST.values():
+        target = tmp_path / ref
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / ref, target)
+    fixture = tmp_path / FIXTURE_ALLOWLIST["domestic_autonomy"]
+    payload = json.loads(fixture.read_text(encoding="utf-8"))
+    payload["model_version"] += "-drift"
+    fixture.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="canonical input contract"):
+        build_run_bundle(tmp_path)
+
+
+def test_generation_rejects_bool_nested_agent_capacity(tmp_path):
+    for ref in FIXTURE_ALLOWLIST.values():
+        target = tmp_path / ref
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / ref, target)
+    fixture = tmp_path / FIXTURE_ALLOWLIST["domestic_autonomy"]
+    payload = json.loads(fixture.read_text(encoding="utf-8"))
+    payload["initial_state"]["agents"]["policy_allocator"]["capacity"] = True
+    fixture.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="agent capacity"):
         build_run_bundle(tmp_path)
 
 
@@ -319,3 +378,32 @@ def test_cli_verify_rejects_nonfinite_bundle_numbers(tmp_path, constant):
     )
     assert completed.returncode != 0
     assert "non-finite JSON number" in completed.stderr
+
+
+@pytest.mark.parametrize("overflow", ("1e999", "2e999", "-1e999"))
+def test_cli_verify_rejects_overflow_bundle_numbers(tmp_path, overflow):
+    text = canonical_bundle_json(build_run_bundle(ROOT)).replace(
+        '"random_draw": 0.8060476863891415', f'"random_draw": {overflow}', 1
+    )
+    path = tmp_path / f"overflow-{overflow}.json"
+    path.write_text(text, encoding="utf-8")
+    completed = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/run_bundle.py"), "--verify", str(path)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode != 0
+    assert "non-finite JSON number" in completed.stderr
+
+
+def test_cli_verify_accepts_canonical_core_random_draw_floats(tmp_path):
+    path = tmp_path / "bundle.json"
+    path.write_text(canonical_bundle_json(build_run_bundle(ROOT)), encoding="utf-8")
+    completed = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/run_bundle.py"), "--verify", str(path)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
