@@ -309,6 +309,23 @@ def test_generation_rejects_bool_nested_agent_capacity(tmp_path):
         build_run_bundle(tmp_path)
 
 
+def test_generation_and_replay_reject_negative_zero_fixture_integer(tmp_path):
+    bundle = build_run_bundle(ROOT)
+    for ref in FIXTURE_ALLOWLIST.values():
+        target = tmp_path / ref
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / ref, target)
+    fixture = tmp_path / FIXTURE_ALLOWLIST["domestic_autonomy"]
+    original = fixture.read_text(encoding="utf-8")
+    mutated = original.replace('"rule_shaping": 0', '"rule_shaping": -0', 1)
+    assert mutated != original
+    fixture.write_text(mutated, encoding="utf-8")
+    with pytest.raises(ValueError, match="non-canonical JSON integer"):
+        build_run_bundle(tmp_path)
+    with pytest.raises(ValueError, match="non-canonical JSON integer"):
+        verify_run_bundle(bundle, tmp_path)
+
+
 @pytest.mark.parametrize(
     "ref",
     ("../outside.json", "/absolute.json", "fixtures/not-allowlisted.json"),
@@ -435,6 +452,22 @@ def test_cli_verify_rejects_alternate_float_token_with_same_binary_value(
     )
     assert completed.returncode != 0
     assert "non-canonical JSON float number" in completed.stderr
+
+
+def test_cli_verify_rejects_negative_zero_integer_token(tmp_path):
+    text = canonical_bundle_json(build_run_bundle(ROOT)).replace(
+        '"modifier": 0', '"modifier": -0', 1
+    )
+    path = tmp_path / "negative-zero-integer.json"
+    path.write_text(text, encoding="utf-8")
+    completed = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/run_bundle.py"), "--verify", str(path)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode != 0
+    assert "non-canonical JSON integer" in completed.stderr
 
 
 def test_cli_verify_allows_noncanonical_whitespace_only(tmp_path):

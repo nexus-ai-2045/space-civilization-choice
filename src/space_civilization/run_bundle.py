@@ -53,6 +53,14 @@ def parse_finite_bundle_float(value: str) -> float:
     return parsed
 
 
+def parse_canonical_json_int(value: str) -> int:
+    """生成側serializerと完全に同じinteger tokenだけを許可する。"""
+    parsed = int(value)
+    if json.dumps(parsed) != value:
+        raise ValueError(f"non-canonical JSON integer: {value}")
+    return parsed
+
+
 def load_strict_json(path: str | Path) -> Any:
     """bundle JSONを重複キー・非有限数なしで一度だけ読み込む。"""
     return json.loads(
@@ -60,6 +68,7 @@ def load_strict_json(path: str | Path) -> Any:
         object_pairs_hook=reject_duplicate_json_pairs,
         parse_constant=reject_nonfinite_json_constant,
         parse_float=parse_finite_bundle_float,
+        parse_int=parse_canonical_json_int,
     )
 
 
@@ -70,6 +79,7 @@ def load_strict_fixture_json(path: str | Path) -> Any:
         object_pairs_hook=reject_duplicate_json_pairs,
         parse_constant=reject_nonfinite_json_constant,
         parse_float=reject_fixture_float_token,
+        parse_int=parse_canonical_json_int,
     )
 
 
