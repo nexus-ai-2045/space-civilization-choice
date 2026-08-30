@@ -199,6 +199,77 @@ def test_external_uncertainties_are_applied_and_traced_each_round():
     )
 
 
+@pytest.mark.parametrize("severity", [13, 50, 100])
+def test_annual_uncertainty_preserves_legacy_four_round_total(severity):
+    parameters = expand_preset("balanced")
+    parameters.update(
+        {
+            "launch_cost_pressure": severity,
+            "supply_disruption": severity,
+            "international_friction": severity,
+        }
+    )
+    result = run_adaptive_simulation(parameters, seed=4)
+    expected = -sum(
+        (severity * round_index) // 125
+        for round_index in range(1, len(ROUNDS) + 1)
+    )
+    totals = {
+        parameter_id: sum(
+            record["attempted_delta"]
+            for item in result["rounds"]
+            for record in item["execution_records"]
+            if record["kind"] == "uncertainty"
+            and record["parameter_id"] == parameter_id
+        )
+        for parameter_id in (
+            "launch_cost_pressure",
+            "supply_disruption",
+            "international_friction",
+        )
+    }
+    assert set(totals.values()) == {expected}
+
+
+def test_final_carry_reconciliation_preserves_action_feedback_uncertainty_order():
+    parameters = expand_preset("balanced")
+    for key in (
+        "transport",
+        "autonomy",
+        "life_support",
+        "energy",
+        "people_research",
+        "international_connection",
+        "open_platform",
+    ):
+        parameters[key] = 0
+    parameters.update(
+        {
+            "domestic_supply": 100,
+            "technology_readiness": 0,
+            "industrial_capacity": 0,
+            "domestic_procurement": 100,
+            "dependency_tolerance": 0,
+            "launch_cost_pressure": 100,
+            "supply_disruption": 100,
+            "international_friction": 100,
+        }
+    )
+    result = run_adaptive_simulation(parameters, seed=4)
+    final_round = result["rounds"][-1]
+    kinds = [record["kind"] for record in final_round["execution_records"]]
+    assert kinds.index("action_reconciliation") < kinds.index("feedback")
+    assert kinds.index("feedback") < kinds.index("uncertainty")
+    assert final_round["before"]["relationship_choice"] == 0
+    assert final_round["after"]["relationship_choice"] == 0
+    relationship_records = [
+        record
+        for record in final_round["execution_records"]
+        if record["axis"] == "relationship_choice"
+    ]
+    assert [record["applied_delta"] for record in relationship_records] == [1, -1]
+
+
 def test_execution_records_are_emitted_at_transition_point_and_reconcile_after():
     result = run_adaptive_simulation(expand_preset("balanced"), seed=4)
     for round_item in result["rounds"]:

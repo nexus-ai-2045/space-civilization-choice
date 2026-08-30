@@ -76,6 +76,32 @@ def test_stream_endpoint_rejects_invalid_parameters_before_ndjson_headers():
         server.server_close()
 
 
+def test_stream_endpoint_emits_terminal_failure_event_after_headers(monkeypatch):
+    monkeypatch.setattr(
+        web_demo,
+        "run_adaptive_simulation",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DemoHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.server_port}/api/simulate/stream",
+            data=json.dumps({"rounds": 15}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:
+            events = [json.loads(line) for line in response]
+        assert events == [
+            {"event": "simulation_failed", "error": "simulation_failed"}
+        ]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_http_rejects_unknown_request_fields():
     server = ThreadingHTTPServer(("127.0.0.1", 0), DemoHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -365,6 +391,9 @@ def test_adaptive_ui_exposes_replay_hash_and_full_pdca_round_labels():
     assert "rounds.replaceChildren()" in source
     assert "button.classList.toggle('active',active)" in source
     assert "clear('#rounds')" not in source
+    assert "event.event==='simulation_failed'" in source
+    types = (web_demo.REPO_ROOT / "frontend/src/types.ts").read_text(encoding="utf-8")
+    assert "{event:'simulation_failed';error:string}" in types
     responsive = (web_demo.REPO_ROOT / "frontend/src/responsive.css").read_text(encoding="utf-8")
     assert ".timeline {" in responsive
     assert "overflow-x: auto" in responsive

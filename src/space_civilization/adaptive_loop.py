@@ -14,7 +14,7 @@ from .providers import (
     derive_provenance_type,
     validate_proposal,
 )
-from .simulation import sha256_json
+from .simulation import ROUNDS, sha256_json
 from .trace_v2 import append_trace
 
 THREE_PHASE_CHAIN = ("cognitive_cultural", "economic_organizational", "physical_material", "cognitive_cultural")
@@ -79,7 +79,6 @@ def _validate_execution_contract(records: list[dict], saturations: list[dict]) -
         "action": "BOUND-ACTION",
         "action_reconciliation": "BOUND-ACTION",
         "feedback": "BOUND-FEEDBACK",
-        "feedback_reconciliation": "BOUND-FEEDBACK",
         "uncertainty": "BOUND-UNCERTAINTY",
     }
     record_ids = [record.get("execution_record_id") for record in records]
@@ -119,6 +118,8 @@ def _truncate_toward_zero(numerator: int, denominator: int) -> int:
 def _apply_actions(
     axes: dict[str, int], accepted: list[dict], year: int,
     carry: dict[tuple[str, str, str], int],
+    *,
+    reconcile: bool = False,
 ) -> tuple[dict[str, int], list[dict], list[dict]]:
     result = deepcopy(axes)
     saturations = []
@@ -156,6 +157,12 @@ def _apply_actions(
                         "execution_record_id": records[-1]["execution_record_id"],
                     }
                 )
+    if reconcile:
+        result, reconciliation_saturations, reconciliation_records = (
+            _reconcile_action_carries(result, carry, year, len(records) + 1)
+        )
+        saturations.extend(reconciliation_saturations)
+        records.extend(reconciliation_records)
     # Close the three-phase loop: visible outcomes feed legitimacy in every round.
     physical_signal = result["access_and_operation"] - axes["access_and_operation"]
     organizational_signal = result["industrial_reproduction"] - axes["industrial_reproduction"]
@@ -256,44 +263,6 @@ def _reconcile_action_carries(
                 }
             )
 
-    physical_signal = result["access_and_operation"] - axes["access_and_operation"]
-    organizational_signal = (
-        result["industrial_reproduction"] - axes["industrial_reproduction"]
-    )
-    feedback_key = ("__core__", "FEEDBACK-LEGITIMACY", "public_legitimacy")
-    feedback_carry_before = carry.get(feedback_key, 0)
-    feedback_numerator = (
-        physical_signal + organizational_signal + feedback_carry_before
-    )
-    attempted_feedback = _truncate_toward_zero(feedback_numerator, 3)
-    carry[feedback_key] = feedback_numerator - attempted_feedback * 3
-    if attempted_feedback:
-        before = result["public_legitimacy"]
-        result["public_legitimacy"], saturated = _bounded_transition(
-            before + attempted_feedback
-        )
-        record = {
-            "execution_record_id": _execution_record_id(
-                year, start_index + len(records)
-            ),
-            "kind": "feedback_reconciliation",
-            "year": year,
-            "rule_id": "FEEDBACK-LEGITIMACY",
-            "axis": "public_legitimacy",
-            "attempted_delta": attempted_feedback,
-            "applied_delta": result["public_legitimacy"] - before,
-            "carry_before": feedback_carry_before,
-            "carry_after": carry[feedback_key],
-            "source": "action_reconciliation",
-        }
-        records.append(record)
-        if saturated:
-            saturations.append(
-                {
-                    "rule_id": "BOUND-FEEDBACK",
-                    "execution_record_id": record["execution_record_id"],
-                }
-            )
     return result, saturations, records
 
 
@@ -314,9 +283,13 @@ def _apply_uncertainty(
     for parameter_id, axis, rule_id in rules:
         severity = parameters[parameter_id]
         carry_before = carry[parameter_id]
-        numerator = -(severity * 10) + carry_before
-        delta = _truncate_toward_zero(numerator, 125 * len(ADAPTIVE_YEARS))
-        carry[parameter_id] = numerator - delta * 125 * len(ADAPTIVE_YEARS)
+        legacy_total = -sum(
+            (severity * round_index) // 125
+            for round_index in range(1, len(ROUNDS) + 1)
+        )
+        numerator = legacy_total + carry_before
+        delta = _truncate_toward_zero(numerator, len(ADAPTIVE_YEARS))
+        carry[parameter_id] = numerator - delta * len(ADAPTIVE_YEARS)
         before = result[axis]
         result[axis], saturated = _bounded_transition(before + delta)
         events.append({"parameter_id": parameter_id, "axis": axis, "delta": result[axis] - before, "attempted_delta": delta, "saturated": saturated, "rule_id": rule_id})
@@ -486,7 +459,11 @@ def run_adaptive_simulation(
         resources = _available_resources(checked)
         accepted, used = _arbitrate(proposals, resources)
         axes, transition_saturations, action_records = _apply_actions(
-            axes, accepted, year, action_carry
+            axes,
+            accepted,
+            year,
+            action_carry,
+            reconcile=year == ADAPTIVE_YEARS[-1],
         )
         (
             axes,
@@ -498,17 +475,6 @@ def run_adaptive_simulation(
         )
         transition_saturations.extend(uncertainty_saturations)
         execution_records = action_records + uncertainty_records
-        if year == ADAPTIVE_YEARS[-1]:
-            axes, reconciliation_saturations, reconciliation_records = (
-                _reconcile_action_carries(
-                    axes,
-                    action_carry,
-                    year,
-                    len(execution_records) + 1,
-                )
-            )
-            transition_saturations.extend(reconciliation_saturations)
-            execution_records.extend(reconciliation_records)
         _validate_execution_contract(execution_records, transition_saturations)
         item = {
             "year": year, "pdca": ["plan", "do", "check", "act"], "before": before,

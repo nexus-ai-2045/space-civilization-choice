@@ -155,6 +155,7 @@ async function runSimulation(){
   let result:SimulationResult|undefined;
   const handleEvent=(event:ProgressEvent)=>{
    if(generation!==runGeneration)return;
+   if(event.event==='simulation_failed')throw new Error(`サーバー側のシミュレーション失敗: ${event.error}`);
    if(event.event==='year_started')s.textContent=`${event.year}年: 5主体が提案を作成中…`;
    if(event.event==='interaction_completed')s.textContent=`${event.year}年: 主体間の応答・再提案を完了`;
    if(event.event==='year_completed')s.textContent=`${event.year}年: 年次PDCA完了（${event.round||event.year-2025} / ${ANNUAL_ROUNDS}）`;
