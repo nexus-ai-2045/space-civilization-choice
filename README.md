@@ -149,6 +149,8 @@ $env:PYTHONPATH = 'src'
 py -3.13 -m pytest -q
 py -3.13 scripts/check_project_goal.py --json
 py -3.13 scripts/run_phase1_fixture.py
+py -3.13 scripts/run_bundle.py evidence/runs/local-run-bundle.json
+py -3.13 scripts/run_bundle.py --verify evidence/runs/local-run-bundle.json
 Push-Location frontend
 npm ci
 npm run build
@@ -163,6 +165,9 @@ $ratchet = Join-Path $env:APPDATA 'Python\Python313\Scripts\ai-ratchet-gate.exe'
 fixture runnerはmanifest、4件のevent、event log hash、canonical output hash、model_internal
 traceをJSONで返します。ブラウザで`http://127.0.0.1:8000`を開き、適応型シミュレーションも
 実行できます。現在のMVP coreは組み込み決定論providerだけを許可し、外部AIやAPI keyは不要です。
+run bundleは三分岐core eventを変更せず、各event envelopeへ同じrun ID、schema、決定論的なglobal
+sequenceとhash chainを付けて保存します。ordered records全体の`event_stream_hash`と件数も証拠へ束縛します。
+出力先は上書きせず、`--verify`はfixtureを再読込して既存runtimeの再実行結果と完全一致するか検査します。
 外部AIは後続の別process JSON/HTTP adapterとして接続します。状態遷移の単一writerはローカル決定論コアです。
 これはBRANCH-001完成、プロダクトMVP完成、公開・応募・政策提言の許可を意味しません。
 
