@@ -8,6 +8,7 @@ from space_civilization.adaptive_loop import (
 )
 from space_civilization.parameter_registry import expand_preset
 from space_civilization.providers import DeterministicProposalProvider, derive_provenance_type
+from space_civilization.simulation import ROUNDS
 
 
 class ExternalPythonProvider:
@@ -17,18 +18,47 @@ class ExternalPythonProvider:
         raise AssertionError("closed MVP core must never execute external objects")
 
 
-def test_five_agents_repeat_pdca_for_four_rounds():
+def test_five_agents_interact_each_year_from_2026_through_2040():
+    assert ROUNDS == (2026, 2030, 2035, 2040)
     result = run_adaptive_simulation(expand_preset("balanced"), seed=42)
-    assert len(result["rounds"]) == 4
+    assert len(result["rounds"]) == 15
     assert all(len(item["proposals"]) == 5 for item in result["rounds"])
-    assert [item["year"] for item in result["rounds"]] == [2026, 2030, 2035, 2040]
+    assert all(len(item["initial_proposals"]) == 5 for item in result["rounds"])
+    assert all(len(item["responses"]) == 5 for item in result["rounds"])
+    assert all(len(item["reproposals"]) == 5 for item in result["rounds"])
+    assert [item["year"] for item in result["rounds"]] == list(range(2026, 2041))
+    assert all(item["proposals"] == item["reproposals"] for item in result["rounds"])
+    assert all(
+        response["responder_agent_id"] != response["target_agent_id"]
+        for item in result["rounds"]
+        for response in item["responses"]
+    )
     assert all(item["pdca"] == ["plan", "do", "check", "act"] for item in result["rounds"])
-    assert result["three_phase_chain"] == [
-        "cognitive_cultural",
-        "economic_organizational",
-        "physical_material",
-        "cognitive_cultural",
-    ]
+    assert result["three_phase_chain"] == ["cognitive_cultural", "economic_organizational", "physical_material", "cognitive_cultural"]
+
+
+def test_annualized_action_effects_do_not_prematurely_saturate_axes():
+    result = run_adaptive_simulation(expand_preset("balanced"), seed=42)
+    assert all(0 < value < 100 for value in result["final_axes"].values())
+    assert any(
+        record["kind"] == "action" and record["carry_after"] != 0
+        for item in result["rounds"]
+        for record in item["execution_records"]
+    )
+
+
+def test_progress_events_are_ordered_and_end_with_completion():
+    events = []
+    result = run_adaptive_simulation(
+        expand_preset("balanced"), seed=42, progress_callback=events.append
+    )
+    assert events[0] == {"event": "year_started", "year": 2026}
+    assert events[-1] == {
+        "event": "simulation_completed",
+        "year": 2040,
+        "canonical_output_hash": result["canonical_output_hash"],
+    }
+    assert [event["year"] for event in events if event["event"] == "year_completed"] == list(range(2026, 2041))
 
 
 def test_replay_is_deterministic_and_seed_changes_run():

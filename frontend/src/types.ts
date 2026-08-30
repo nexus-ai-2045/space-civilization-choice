@@ -11,5 +11,12 @@ export type SimulationResult={
  rounds?:RoundView[];
  canonical_output_hash?:string;
 };
+export type ProgressEvent={
+ event:'year_started'|'interaction_completed'|'year_completed'|'simulation_completed';
+ year:number;
+ round?:number;
+ canonical_output_hash?:string;
+ result?:SimulationResult;
+};
 export type SimParams=Record<string,number>;
 export type ConstellationState={domains:string[];acceptedActions:string[];axes:Axis[]};

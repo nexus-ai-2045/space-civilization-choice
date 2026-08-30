@@ -8,9 +8,9 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from .adaptive_loop import run_adaptive_simulation
+from .adaptive_loop import ADAPTIVE_YEARS, run_adaptive_simulation
 from .comparison import BRANCHES, compare_simulations
-from .parameter_registry import ParameterError, expand_preset
+from .parameter_registry import ParameterError, expand_preset, validate_parameters
 from .simulation import (
     PHASE1_ALLOWED_ACTIONS,
     PHASE1_TRANSITION_RULES,
@@ -207,12 +207,11 @@ def _round_view(round_item: dict[str, Any], round_index: int) -> dict[str, Any]:
     }
 
 
-def build_adaptive_demo(parameters: dict[str, int] | None = None, *, seed: int = 20260829) -> dict[str, Any]:
-    result = run_adaptive_simulation(expand_preset("balanced") if parameters is None else parameters, seed=seed)
+def _adaptive_demo_view(result: dict[str, Any]) -> dict[str, Any]:
     round_views = [_round_view(item, index) for index, item in enumerate(result["rounds"], start=1)]
     last = round_views[-1]
     return {
-        "schema": "space_civilization_web_demo.v2",
+        "schema": "space_civilization_web_demo.v3",
         "round": last["round"],
         "year": last["year"],
         "decision_engine": "deterministic_local_v1",
@@ -223,6 +222,11 @@ def build_adaptive_demo(parameters: dict[str, int] | None = None, *, seed: int =
         "canonical_output_hash": result["canonical_output_hash"],
         "simulation": result,
     }
+
+
+def build_adaptive_demo(parameters: dict[str, int] | None = None, *, seed: int = 20260829) -> dict[str, Any]:
+    result = run_adaptive_simulation(expand_preset("balanced") if parameters is None else parameters, seed=seed)
+    return _adaptive_demo_view(result)
 
 
 def adaptive_frontend_available() -> bool:
@@ -236,7 +240,7 @@ class DemoHandler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=str(static_root), **kwargs)
 
     def do_POST(self) -> None:  # noqa: N802
-        if self.path != "/api/simulate":
+        if self.path not in {"/api/simulate", "/api/simulate/stream"}:
             self.send_error(404)
             return
         try:
@@ -247,8 +251,8 @@ class DemoHandler(SimpleHTTPRequestHandler):
             request_body = json.loads(raw.decode("utf-8"))
             if not isinstance(request_body, dict) or set(request_body) - {"parameters", "rounds", "seed"}:
                 raise ParameterError("request object contains unknown fields")
-            if request_body.get("rounds", 4) != 4:
-                raise ParameterError("rounds must be 4")
+            if request_body.get("rounds", len(ADAPTIVE_YEARS)) != len(ADAPTIVE_YEARS):
+                raise ParameterError(f"rounds must be {len(ADAPTIVE_YEARS)}")
             seed_supplied = "seed" in request_body
             seed = request_body.get("seed", 20260829)
             if type(seed) is not int:
@@ -256,6 +260,9 @@ class DemoHandler(SimpleHTTPRequestHandler):
             parameters = request_body.get("parameters")
             if parameters is not None and not isinstance(parameters, dict):
                 raise ParameterError("parameters must be an object")
+            if self.path == "/api/simulate/stream":
+                self._stream_adaptive_simulation(parameters, seed)
+                return
             # Fallback UI (web/app.js) expects branch_order / branches / ai_mode.
             # Explicit parameter objects are still validated fail-closed even on the
             # legacy route; omission (None) keeps the zero-config fallback demo.
@@ -288,6 +295,48 @@ class DemoHandler(SimpleHTTPRequestHandler):
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
+
+    def _stream_adaptive_simulation(
+        self, parameters: dict[str, int] | None, seed: int
+    ) -> None:
+        """Stream actual computation milestones as NDJSON, then the final view."""
+        checked_parameters = validate_parameters(
+            expand_preset("balanced") if parameters is None else parameters
+        )
+        self.send_response(200)
+        self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+
+        def write_event(event: dict[str, Any]) -> None:
+            self.wfile.write(
+                json.dumps(event, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+                + b"\n"
+            )
+            self.wfile.flush()
+
+        def emit(event: dict[str, Any]) -> None:
+            if event["event"] != "simulation_completed":
+                write_event(event)
+
+        try:
+            result = run_adaptive_simulation(
+                checked_parameters,
+                seed=seed,
+                progress_callback=emit,
+            )
+            final_event = {
+                "event": "simulation_completed",
+                "year": ADAPTIVE_YEARS[-1],
+                "canonical_output_hash": result["canonical_output_hash"],
+                "result": _adaptive_demo_view(result),
+            }
+            write_event(final_event)
+        except (BrokenPipeError, ConnectionResetError):
+            return
+        except Exception:
+            write_event({"event": "simulation_failed", "error": "simulation_failed"})
 
 
 def serve(host: str = "127.0.0.1", port: int = 8000) -> None:
