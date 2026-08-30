@@ -407,3 +407,35 @@ def test_cli_verify_accepts_canonical_core_random_draw_floats(tmp_path):
         text=True,
     )
     assert completed.returncode == 0, completed.stderr
+
+
+def test_cli_verify_rejects_alternate_float_token_with_same_binary_value(tmp_path):
+    canonical = "0.8060476863891415"
+    alternate = "0.80604768638914149"
+    assert float(canonical) == float(alternate)
+    text = canonical_bundle_json(build_run_bundle(ROOT)).replace(
+        f'"random_draw": {canonical}', f'"random_draw": {alternate}', 1
+    )
+    path = tmp_path / "alternate-float-token.json"
+    path.write_text(text, encoding="utf-8")
+    completed = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/run_bundle.py"), "--verify", str(path)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode != 0
+    assert "non-canonical JSON float number" in completed.stderr
+
+
+def test_cli_verify_allows_noncanonical_whitespace_only(tmp_path):
+    text = canonical_bundle_json(build_run_bundle(ROOT)).replace(": ", " :   ")
+    path = tmp_path / "whitespace.json"
+    path.write_text(text, encoding="utf-8")
+    completed = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/run_bundle.py"), "--verify", str(path)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr

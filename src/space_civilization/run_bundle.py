@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+from decimal import Decimal, InvalidOperation
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
 
@@ -41,10 +42,17 @@ def reject_fixture_float_token(value: str) -> Any:
 
 
 def parse_finite_bundle_float(value: str) -> float:
-    """core eventの有限floatだけを許可し、overflowを拒否する。"""
-    parsed = float(value)
+    """生成側のbinary floatと同じ十進値を表すtokenだけを許可する。"""
+    try:
+        token_value = Decimal(value)
+        parsed = float(token_value)
+        canonical_value = Decimal(str(parsed))
+    except (InvalidOperation, OverflowError, ValueError) as error:
+        raise ValueError(f"invalid JSON float number: {value}") from error
     if not math.isfinite(parsed):
         raise ValueError(f"non-finite JSON number: {value}")
+    if canonical_value != token_value:
+        raise ValueError(f"non-canonical JSON float number: {value}")
     return parsed
 
 
