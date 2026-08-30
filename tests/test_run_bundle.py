@@ -583,3 +583,27 @@ def test_malformed_rounds_keep_the_value_error_contract(tmp_path, rounds):
     fixture.write_text(json.dumps(payload), encoding="utf-8")
     with pytest.raises(ValueError):
         build_run_bundle(tmp_path)
+
+
+@pytest.mark.parametrize("value", (None, 1, True, []))
+@pytest.mark.parametrize("field", ("axes", "axis_deltas", "base_axis_deltas"))
+def test_nonobject_axis_containers_keep_the_value_error_contract(
+    tmp_path, field, value
+):
+    for ref in FIXTURE_ALLOWLIST.values():
+        target = tmp_path / ref
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / ref, target)
+    fixture = tmp_path / FIXTURE_ALLOWLIST["domestic_autonomy"]
+    payload = json.loads(fixture.read_text(encoding="utf-8"))
+    if field == "axes":
+        payload["initial_state"][field] = value
+    elif field == "base_axis_deltas":
+        payload["rounds"][0]["base_rule_id"] = payload["rounds"][0]["rule_id"]
+        payload["rounds"][0]["base_action"] = payload["rounds"][0]["action"]
+        payload["rounds"][0][field] = value
+    else:
+        payload["rounds"][0][field] = value
+    fixture.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError):
+        build_run_bundle(tmp_path)

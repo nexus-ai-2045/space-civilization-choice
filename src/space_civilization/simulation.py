@@ -134,11 +134,17 @@ def validate_fixture(data: dict[str, Any], *, allow_hackathon_demo_branches: boo
     state = data["initial_state"]
     if not isinstance(state, dict):
         raise SimulationError("initial_state must be an object")
-    if set(state.get("axes", {})) != set(AXES):
+    axes = state.get("axes")
+    if not isinstance(axes, dict):
+        raise SimulationError("initial_state.axes must be a JSON object")
+    if set(axes) != set(AXES):
         raise SimulationError("initial_state.axes must contain the six canonical axes")
-    if set(state.get("agents", {})) != set(AGENTS):
+    agents = state.get("agents")
+    if not isinstance(agents, dict):
+        raise SimulationError("fixture agents must be a JSON object")
+    if set(agents) != set(AGENTS):
         raise SimulationError("initial_state.agents must contain the five canonical agents")
-    for axis, value in state["axes"].items():
+    for axis, value in axes.items():
         if not _is_int(value) or not 0 <= value <= 100:
             raise SimulationError(f"axis out of range: {axis}")
     for index, item in enumerate(rounds, start=1):
@@ -163,7 +169,11 @@ def validate_fixture(data: dict[str, Any], *, allow_hackathon_demo_branches: boo
         if item["exogenous_event"] not in EXOGENOUS_EVENT_AXES:
             raise SimulationError(f"round {index} exogenous_event has no canonical transition rule")
         deltas = item.get("axis_deltas", {})
-        if set(deltas) != set(AXES) or any(not _is_int(v) for v in deltas.values()):
+        if (
+            not isinstance(deltas, dict)
+            or set(deltas) != set(AXES)
+            or any(not _is_int(v) for v in deltas.values())
+        ):
             raise SimulationError(f"round {index} axis_deltas invalid")
         adaptive_fields = {"base_rule_id", "base_action", "base_axis_deltas"}
         present_adaptive_fields = adaptive_fields & item.keys()

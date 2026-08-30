@@ -202,7 +202,6 @@ def build_run_bundle(
         fixture = load_strict_fixture_json(paths[branch])
         if not isinstance(fixture, dict):
             raise ValueError("fixture must be a JSON object")
-        _require_fixture_agents_object(fixture)
         validate_fixture(fixture, allow_hackathon_demo_branches=True)
         _fixture_shared_contract(fixture)
         fixtures[branch] = fixture
