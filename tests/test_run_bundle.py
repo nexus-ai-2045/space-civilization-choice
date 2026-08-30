@@ -529,14 +529,15 @@ def test_verifier_converts_deeply_nested_bundle_to_value_error():
         verify_run_bundle(bundle, ROOT)
 
 
-def test_generation_and_verification_reject_agents_array_fixture(tmp_path):
+@pytest.mark.parametrize("agents", (None, 1, True, []))
+def test_generation_and_verification_reject_nonobject_agents_fixture(tmp_path, agents):
     for ref in FIXTURE_ALLOWLIST.values():
         target = tmp_path / ref
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / ref, target)
     fixture = tmp_path / FIXTURE_ALLOWLIST["domestic_autonomy"]
     payload = json.loads(fixture.read_text(encoding="utf-8"))
-    payload["initial_state"]["agents"] = sorted(payload["initial_state"]["agents"])
+    payload["initial_state"]["agents"] = agents
     fixture.write_text(json.dumps(payload), encoding="utf-8")
     with pytest.raises(ValueError, match="fixture agents must be a JSON object"):
         build_run_bundle(tmp_path)
@@ -544,3 +545,24 @@ def test_generation_and_verification_reject_agents_array_fixture(tmp_path):
     bundle = build_run_bundle(ROOT)
     with pytest.raises(ValueError, match="fixture agents must be a JSON object"):
         verify_run_bundle(bundle, tmp_path)
+
+
+def test_fixture_loader_rejects_depth_that_fails_during_serialization(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "fixture.json"
+    path.write_text('{"accepted_extra": {}}', encoding="utf-8")
+    parsed = {"accepted_extra": {}}
+
+    def fake_loads(*args, **kwargs):
+        return parsed
+
+    def fake_dumps(value, *args, **kwargs):
+        if value is parsed:
+            raise RecursionError("fixture nesting")
+        return json.dumps(value, *args, **kwargs)
+
+    monkeypatch.setattr("space_civilization.run_bundle.json.loads", fake_loads)
+    monkeypatch.setattr("space_civilization.run_bundle.json.dumps", fake_dumps)
+    with pytest.raises(ValueError, match="fixture JSON nesting is too deep"):
+        load_strict_fixture_json(path)

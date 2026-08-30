@@ -111,13 +111,17 @@ def load_strict_json(path: str | Path) -> Any:
 def load_strict_fixture_json(path: str | Path) -> Any:
     """integer-only fixture JSONを一度だけ読み込む。"""
     try:
-        return json.loads(
+        parsed = json.loads(
             Path(path).read_text(encoding="utf-8"),
             object_pairs_hook=reject_duplicate_json_pairs,
             parse_constant=reject_nonfinite_json_constant,
             parse_float=reject_fixture_float_token,
             parse_int=parse_canonical_json_int,
         )
+        # Parserの再帰上限内でも、後段のcanonical serializationが処理できない
+        # 深さを持つ入力は、この信頼境界で拒否する。
+        json.dumps(parsed, ensure_ascii=False, allow_nan=False)
+        return parsed
     except RecursionError as error:
         raise ValueError("fixture JSON nesting is too deep") from error
 
@@ -132,7 +136,10 @@ def _fixture_shared_contract(fixture: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("fixture model_version must be a non-empty string")
     if type(seed) is not int:
         raise ValueError("fixture seed must be a strict integer")
-    agents = fixture["initial_state"]["agents"]
+    initial_state = fixture.get("initial_state")
+    if not isinstance(initial_state, dict):
+        raise ValueError("fixture initial_state must be a JSON object")
+    agents = initial_state.get("agents")
     if not isinstance(agents, dict):
         raise ValueError("fixture agents must be a JSON object")
     if any(
@@ -144,7 +151,7 @@ def _fixture_shared_contract(fixture: dict[str, Any]) -> dict[str, Any]:
         "scenario_snapshot_id": scenario_snapshot_id,
         "model_version": model_version,
         "seed": seed,
-        "initial_state": fixture["initial_state"],
+        "initial_state": initial_state,
         "rounds": [
             {"year": item["year"], "exogenous_event": item["exogenous_event"]}
             for item in fixture["rounds"]
@@ -188,8 +195,8 @@ def build_run_bundle(
         fixture = load_strict_fixture_json(paths[branch])
         if not isinstance(fixture, dict):
             raise ValueError("fixture must be a JSON object")
-        validate_fixture(fixture, allow_hackathon_demo_branches=True)
         _fixture_shared_contract(fixture)
+        validate_fixture(fixture, allow_hackathon_demo_branches=True)
         fixtures[branch] = fixture
     shared_contract_hashes = {
         sha256_json(_fixture_shared_contract(fixtures[branch])) for branch in BRANCHES
