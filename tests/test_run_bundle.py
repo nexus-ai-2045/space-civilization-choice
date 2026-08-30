@@ -17,6 +17,8 @@ from space_civilization.run_bundle import (
     FIXTURE_ALLOWLIST,
     build_run_bundle,
     canonical_bundle_json,
+    load_strict_fixture_json,
+    load_strict_json,
     verify_run_bundle,
 )
 from space_civilization.simulation import sha256_json
@@ -55,7 +57,7 @@ def test_bundle_is_deterministic_and_wraps_unchanged_core_events():
     assert [record["turn_id"] for record in records] == list(range(1, 5)) * 3
     previous = "0" * 64
     for record in records:
-        assert record["schema"] == "meta-security-run-event/v1"
+        assert record["schema"] == "space-civilization-run-event/v1"
         assert record["run_id"] == run_id
         assert record["previous_hash"] == previous
         assert record["event_hash"] == sha256_json(record["event"])
@@ -133,7 +135,7 @@ def test_verifier_rejects_noncanonical_bundle(mutation):
     elif mutation == "unknown_field":
         bundle["replay"]["unexpected"] = True
     else:
-        bundle["schema"] = "meta-security-run-bundle/v2"
+        bundle["schema"] = "space-civilization-run-bundle/v2"
     with pytest.raises(ValueError):
         verify_run_bundle(bundle, ROOT)
 
@@ -473,7 +475,7 @@ def test_cli_verify_rejects_negative_zero_integer_token(tmp_path):
 @pytest.mark.parametrize(
     ("original", "alternate"),
     (
-        ("meta-security-run-bundle/v1", "meta-security-run-bundle\\/v1"),
+        ("space-civilization-run-bundle/v1", "space-civilization-run-bundle\\/v1"),
         ("international_integration", "international_\\u0069ntegration"),
     ),
 )
@@ -506,3 +508,39 @@ def test_cli_verify_allows_noncanonical_whitespace_only(tmp_path):
         text=True,
     )
     assert completed.returncode == 0, completed.stderr
+
+
+def test_loaders_convert_deep_nesting_to_value_error(tmp_path):
+    path = tmp_path / "deep.json"
+    path.write_text("[" * 100000 + "]" * 100000, encoding="utf-8")
+    with pytest.raises(ValueError, match="nesting is too deep"):
+        load_strict_json(path)
+    with pytest.raises(ValueError, match="nesting is too deep"):
+        load_strict_fixture_json(path)
+
+
+def test_verifier_converts_deeply_nested_bundle_to_value_error():
+    bundle = build_run_bundle(ROOT)
+    deep: list = []
+    for _ in range(100000):
+        deep = [deep]
+    bundle["event_stream"] = deep
+    with pytest.raises(ValueError, match="nesting is too deep"):
+        verify_run_bundle(bundle, ROOT)
+
+
+def test_generation_and_verification_reject_agents_array_fixture(tmp_path):
+    for ref in FIXTURE_ALLOWLIST.values():
+        target = tmp_path / ref
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / ref, target)
+    fixture = tmp_path / FIXTURE_ALLOWLIST["domestic_autonomy"]
+    payload = json.loads(fixture.read_text(encoding="utf-8"))
+    payload["initial_state"]["agents"] = sorted(payload["initial_state"]["agents"])
+    fixture.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="fixture agents must be a JSON object"):
+        build_run_bundle(tmp_path)
+
+    bundle = build_run_bundle(ROOT)
+    with pytest.raises(ValueError, match="fixture agents must be a JSON object"):
+        verify_run_bundle(bundle, tmp_path)

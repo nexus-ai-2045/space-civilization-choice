@@ -11,7 +11,7 @@ from .comparison import BRANCHES, compare_simulations
 from .simulation import canonical_json, sha256_json, validate_fixture
 
 
-BUNDLE_SCHEMA = "meta-security-run-bundle/v1"
+BUNDLE_SCHEMA = "space-civilization-run-bundle/v1"
 ZERO_HASH = "0" * 64
 FIXTURE_ALLOWLIST = {
     "international_integration": "fixtures/phase1_international_cooperation.json",
@@ -86,20 +86,24 @@ def _without_insignificant_json_whitespace(text: str) -> str:
 def load_strict_json(path: str | Path) -> Any:
     """bundle JSONを重複キー・非有限数なしで一度だけ読み込む。"""
     text = Path(path).read_text(encoding="utf-8")
-    parsed = json.loads(
-        text,
-        object_pairs_hook=reject_duplicate_json_pairs,
-        parse_constant=reject_nonfinite_json_constant,
-        parse_float=parse_finite_bundle_float,
-        parse_int=parse_canonical_json_int,
-    )
-    canonical = json.dumps(
-        parsed,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        allow_nan=False,
-    )
+    try:
+        parsed = json.loads(
+            text,
+            object_pairs_hook=reject_duplicate_json_pairs,
+            parse_constant=reject_nonfinite_json_constant,
+            parse_float=parse_finite_bundle_float,
+            parse_int=parse_canonical_json_int,
+        )
+        canonical = json.dumps(
+            parsed,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except RecursionError as error:
+        # 拒否経路の例外契約はValueErrorで統一する
+        raise ValueError("bundle JSON nesting is too deep") from error
     if _without_insignificant_json_whitespace(text) != canonical:
         raise ValueError("bundle contains non-canonical JSON token spelling or key order")
     return parsed
@@ -107,13 +111,16 @@ def load_strict_json(path: str | Path) -> Any:
 
 def load_strict_fixture_json(path: str | Path) -> Any:
     """integer-only fixture JSONを一度だけ読み込む。"""
-    return json.loads(
-        Path(path).read_text(encoding="utf-8"),
-        object_pairs_hook=reject_duplicate_json_pairs,
-        parse_constant=reject_nonfinite_json_constant,
-        parse_float=reject_fixture_float_token,
-        parse_int=parse_canonical_json_int,
-    )
+    try:
+        return json.loads(
+            Path(path).read_text(encoding="utf-8"),
+            object_pairs_hook=reject_duplicate_json_pairs,
+            parse_constant=reject_nonfinite_json_constant,
+            parse_float=reject_fixture_float_token,
+            parse_int=parse_canonical_json_int,
+        )
+    except RecursionError as error:
+        raise ValueError("fixture JSON nesting is too deep") from error
 
 
 def _fixture_shared_contract(fixture: dict[str, Any]) -> dict[str, Any]:
@@ -127,6 +134,8 @@ def _fixture_shared_contract(fixture: dict[str, Any]) -> dict[str, Any]:
     if type(seed) is not int:
         raise ValueError("fixture seed must be a strict integer")
     agents = fixture["initial_state"]["agents"]
+    if not isinstance(agents, dict):
+        raise ValueError("fixture agents must be a JSON object")
     if any(
         not isinstance(agent, dict) or type(agent.get("capacity")) is not int
         for agent in agents.values()
@@ -197,7 +206,7 @@ def build_run_bundle(
         raise ValueError("branch manifests must share one canonical scenario snapshot hash")
     scenario_snapshot_hash = scenario_snapshot_hashes.pop()
     request_content = {
-        "schema": "meta-security-run-request/v1",
+        "schema": "space-civilization-run-request/v1",
         "seed": comparison["seed"],
         "model_version": comparison["model_version"],
         "fixtures": [
@@ -219,7 +228,7 @@ def build_run_bundle(
             if event.get("turn_id") != expected_turn:
                 raise ValueError("core runtime returned a non-contiguous turn_id")
             content = {
-                "schema": "meta-security-run-event/v1",
+                "schema": "space-civilization-run-event/v1",
                 "run_id": run_id,
                 "sequence": sequence,
                 "branch": branch,
@@ -233,7 +242,7 @@ def build_run_bundle(
             previous_hash = record_hash
             sequence += 1
     replay = {
-        "schema": "meta-security-replay/v1",
+        "schema": "space-civilization-replay/v1",
         "run_id": run_id,
         "comparison_hash": comparison["comparison_hash"],
         "branches": [
@@ -246,7 +255,7 @@ def build_run_bundle(
         ],
     }
     evidence = {
-        "schema": "meta-security-evidence/v1",
+        "schema": "space-civilization-evidence/v1",
         "run_id": run_id,
         "scenario_snapshot_hash": scenario_snapshot_hash,
         "exogenous_event_stream_hash": comparison["exogenous_event_stream_hash"],
@@ -259,7 +268,7 @@ def build_run_bundle(
         "run_id": run_id,
         "run_request": {**request_content, "run_id": run_id},
         "event_stream": {
-            "schema": "meta-security-event-stream/v1",
+            "schema": "space-civilization-event-stream/v1",
             "run_id": run_id,
             "event_count": len(records),
             "event_stream_hash": sha256_json(records),
@@ -301,7 +310,11 @@ def verify_run_bundle(bundle: Any, repo_root: str | Path) -> None:
             raise ValueError("fixture order or branch is invalid")
         refs[expected_branch] = fixture["ref"]
     expected = build_run_bundle(repo_root, refs)
-    if canonical_json(top) != canonical_json(expected):
+    try:
+        actual = canonical_json(top)
+    except RecursionError as error:
+        raise ValueError("run bundle nesting is too deep") from error
+    if actual != canonical_json(expected):
         raise ValueError("run bundle does not match the canonical runtime replay")
 
 

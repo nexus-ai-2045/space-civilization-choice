@@ -18,13 +18,14 @@
 
 ### Run bundle v1
 
-`meta-security-run-bundle/v1`は既存の`compare_simulations`と`run_simulation`を包む薄い証拠形式であり、
-独自の状態遷移規則を持たない。`run_request`、`event_stream`、`replay`、`evidence`は、fixture参照・
+`space-civilization-run-bundle/v1`は既存の`compare_simulations`と`run_simulation`を包む薄い証拠形式であり、
+独自の状態遷移規則を持たない。schema名は本repository固有のnamespaceを使い、その正本は本repositoryである。
+外部の実行封筒契約 (live実行receiptを付けて本bundleを包む側) とはschema名を共有せず、構造互換も宣言しない。`run_request`、`event_stream`、`replay`、`evidence`は、fixture参照・
 fixture content hash・seed・model versionから導く同一の`run_id`を持つ。fixture参照はrepository内の
 許可済み相対pathだけを受理する。
 
 event streamは`international_integration`、`domestic_autonomy`、`open_platform`の順、その中で
-連続する`turn_id`順に並べる。各wrapper recordは`meta-security-run-event/v1`と同じ`run_id`を持ち、
+連続する`turn_id`順に並べる。各wrapper recordは`space-civilization-run-event/v1`と同じ`run_id`を持ち、
 これらを含むrecord全体へglobal `sequence`とhash chainを付ける。既存core eventへ`run_id`等を注入しない。
 このため既存の`event_log_hash`と`canonical_output_hash`を変更しない。
 
