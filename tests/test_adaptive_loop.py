@@ -3,6 +3,7 @@ from copy import deepcopy
 import pytest
 
 from space_civilization.adaptive_loop import (
+    _apply_actions,
     _validate_execution_contract,
     run_adaptive_simulation,
 )
@@ -45,6 +46,29 @@ def test_annualized_action_effects_do_not_prematurely_saturate_axes():
         for item in result["rounds"]
         for record in item["execution_records"]
     )
+
+
+def test_action_carry_is_scoped_to_agent_action_and_axis_for_trace_attribution():
+    axes = {
+        "access_and_operation": 50,
+        "industrial_reproduction": 50,
+        "rule_shaping": 50,
+        "knowledge_continuity": 50,
+        "relationship_optionality": 50,
+        "public_legitimacy": 50,
+    }
+    carry = {}
+    accepted = [
+        {"agent_id": "agent-a", "action_id": "action-a", "effects": {"access_and_operation": 2}},
+        {"agent_id": "agent-b", "action_id": "action-b", "effects": {"access_and_operation": 2}},
+    ]
+    _, _, records = _apply_actions(axes, accepted, 2026, carry)
+    action_records = [record for record in records if record["kind"] == "action"]
+    assert [record["carry_before"] for record in action_records] == [0, 0]
+    assert set(carry) == {
+        ("agent-a", "action-a", "access_and_operation"),
+        ("agent-b", "action-b", "access_and_operation"),
+    }
 
 
 def test_progress_events_are_ordered_and_end_with_completion():

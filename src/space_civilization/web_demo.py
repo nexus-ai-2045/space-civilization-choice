@@ -186,10 +186,31 @@ def _trace_rows(
 
 def _round_view(round_item: dict[str, Any], round_index: int) -> dict[str, Any]:
     execution_records = round_item["execution_records"]
+    initial_by_agent = {
+        item["agent_id"]: item for item in round_item["initial_proposals"]
+    }
+    reproposal_by_agent = {
+        item["agent_id"]: item for item in round_item["reproposals"]
+    }
     return {
         "round": round_index,
         "year": round_item["year"],
         "proposals": _proposal_rows(round_item),
+        "interactions": [
+            {
+                **response,
+                "initial_action_id": initial_by_agent[response["target_agent_id"]]["action_id"],
+                "initial_action": ACTION_PRESENTATION[
+                    initial_by_agent[response["target_agent_id"]]["action_id"]
+                ],
+                "final_action_id": reproposal_by_agent[response["target_agent_id"]]["action_id"],
+                "final_action": ACTION_PRESENTATION[
+                    reproposal_by_agent[response["target_agent_id"]]["action_id"]
+                ],
+                "final_priority": reproposal_by_agent[response["target_agent_id"]]["priority"],
+            }
+            for response in round_item["responses"]
+        ],
         "axes": _axes_rows(round_item["after"]),
         "trace": _trace_rows(
             execution_records,

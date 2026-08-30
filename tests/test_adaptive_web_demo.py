@@ -23,6 +23,13 @@ def test_adaptive_demo_exposes_local_engine_and_annual_rounds():
     assert len(result["proposals"]) == 5
     assert len(result["axes"]) == 6
     assert all("domains" in item for item in result["rounds"])
+    assert all(len(item["interactions"]) == 5 for item in result["rounds"])
+    assert all(
+        {"responder_agent_id", "target_agent_id", "stance", "initial_action", "final_action", "final_priority"}
+        <= set(interaction)
+        for item in result["rounds"]
+        for interaction in item["interactions"]
+    )
 
 
 def test_stream_endpoint_emits_honest_annual_progress_and_final_result():
@@ -323,6 +330,11 @@ def test_adaptive_ui_exposes_replay_hash_and_full_pdca_round_labels():
     assert "年ごと完全PDCA" in source
     assert "AbortController" in source
     assert "reader.cancel()" in source
+    assert "主体間の応答と再提案" in source
+    assert "結果リプレイを停止" in source
+    responsive = (web_demo.REPO_ROOT / "frontend/src/responsive.css").read_text(encoding="utf-8")
+    assert ".timeline {" in responsive
+    assert "overflow-x: auto" in responsive
     assert "['計画 (Plan)','実行 (Do)','評価 (Check)','改善 (Act)']" not in source
 
 

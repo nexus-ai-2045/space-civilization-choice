@@ -115,7 +115,8 @@ def _truncate_toward_zero(numerator: int, denominator: int) -> int:
 
 
 def _apply_actions(
-    axes: dict[str, int], accepted: list[dict], year: int, carry: dict[str, int]
+    axes: dict[str, int], accepted: list[dict], year: int,
+    carry: dict[tuple[str, str, str], int],
 ) -> tuple[dict[str, int], list[dict], list[dict]]:
     result = deepcopy(axes)
     saturations = []
@@ -123,10 +124,11 @@ def _apply_actions(
     for item in accepted:
         for axis, delta in item["effects"].items():
             before = result[axis]
-            carry_before = carry[axis]
+            carry_key = (item["agent_id"], item["action_id"], axis)
+            carry_before = carry.get(carry_key, 0)
             numerator = delta * ANNUAL_EFFECT_NUMERATOR + carry_before
             annual_delta = _truncate_toward_zero(numerator, ANNUAL_EFFECT_DENOMINATOR)
-            carry[axis] = numerator - annual_delta * ANNUAL_EFFECT_DENOMINATOR
+            carry[carry_key] = numerator - annual_delta * ANNUAL_EFFECT_DENOMINATOR
             result[axis], saturated = _bounded_transition(before + annual_delta)
             records.append(
                 {
@@ -142,7 +144,7 @@ def _apply_actions(
                     "applied_delta": result[axis] - before,
                     "base_delta": delta,
                     "carry_before": carry_before,
-                    "carry_after": carry[axis],
+                    "carry_after": carry[carry_key],
                 }
             )
             if saturated:
@@ -305,7 +307,7 @@ def run_adaptive_simulation(
     }
     provenance_type = derive_provenance_type(active_provider)
     axes = _initial_axes(checked)
-    action_carry = {axis: 0 for axis in axes}
+    action_carry: dict[tuple[str, str, str], int] = {}
     uncertainty_carry = {
         key: 0 for key in ("launch_cost_pressure", "supply_disruption", "international_friction")
     }

@@ -16,7 +16,7 @@ let activeRun:AbortController|undefined;
 const ANNUAL_ROUNDS=15;
 const prefersReducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)');
 
-app.innerHTML=`<header><div><strong>CAUSAL CONSTELLATION</strong><h1>宇宙文明の選択肢を、同じ未来条件で比較する</h1></div><div class="mode">ローカル・マルチエージェントPDCA（2026–2040年）</div><label>シナリオ名<input value="デフォルトシナリオ" aria-label="シナリオ名"></label></header><main><aside class="panel controls"><h2>パラメータを編集</h2><div id="control-list"></div><button id="run">▶ シミュレーションを実行</button><output id="status" aria-live="polite">実行待ち</output><p class="progress-note">実際の年次イベントで進捗を表示し、計算完了後に結果をリプレイします。</p></aside><section class="stage"><div id="game" aria-label="三領域の因果コンステレーション"></div><div class="legend">→ 因果リンク　⋯ フィードバックループ　✦ 選択された介入パス</div><section class="timeline"><h2>シミュレーションタイムライン（年ごと完全PDCA・2026–2040年）</h2><div id="rounds" aria-label="年次結果"></div></section></section><aside class="panel evidence"><h2>エビデンス＆トレース</h2><div id="current"></div><p id="engine"></p><p id="replay-hash" class="replay-hash"></p><h3>提案と意思決定</h3><div id="proposals"></div><h3>アウトプット指標（6軸）</h3><div id="axes"></div><details><summary>因果トレースを表示</summary><ol id="trace"></ol></details></aside></main><footer>本シミュレーションは仮説的な因果関係に基づく探索的分析であり、実在の未来を保証するものではありません。<span>● ローカル実行モード</span></footer>`;
+app.innerHTML=`<header><div><strong>CAUSAL CONSTELLATION</strong><h1>宇宙文明の選択肢を、同じ未来条件で比較する</h1></div><div class="mode">ローカル・マルチエージェントPDCA（2026–2040年）</div><label>シナリオ名<input value="デフォルトシナリオ" aria-label="シナリオ名"></label></header><main><aside class="panel controls"><h2>パラメータを編集</h2><div id="control-list"></div><button id="run">▶ シミュレーションを実行</button><output id="status" aria-live="polite">実行待ち</output><p class="progress-note">実際の年次イベントで進捗を表示し、計算完了後に結果をリプレイします。</p></aside><section class="stage"><div id="game" aria-label="三領域の因果コンステレーション"></div><div class="legend">→ 因果リンク　⋯ フィードバックループ　✦ 選択された介入パス</div><section class="timeline"><h2>シミュレーションタイムライン（年ごと完全PDCA・2026–2040年）</h2><div id="rounds" aria-label="年次結果"></div></section></section><aside class="panel evidence"><h2>エビデンス＆トレース</h2><div id="current"></div><p id="engine"></p><p id="replay-hash" class="replay-hash"></p><h3>提案と意思決定</h3><div id="proposals"></div><h3>主体間の応答と再提案</h3><div id="interactions"></div><h3>アウトプット指標（6軸）</h3><div id="axes"></div><details><summary>因果トレースを表示</summary><ol id="trace"></ol></details></aside></main><footer>本シミュレーションは仮説的な因果関係に基づく探索的分析であり、実在の未来を保証するものではありません。<span>● ローカル実行モード</span></footer>`;
 
 function el<K extends keyof HTMLElementTagNameMap>(tag:K,cls?:string,text?:string){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
 function clear(q:string){const n=document.querySelector(q)!;n.replaceChildren();return n}
@@ -53,7 +53,7 @@ function viewFor(result:SimulationResult,round:number):RoundView{
   const found=result.rounds.find(item=>item.round===round)||result.rounds[result.rounds.length-1];
   return found;
  }
- return {round:result.round,year:result.year,axes:result.axes,proposals:result.proposals,trace:result.trace,domains:result.proposals.filter(p=>p.accepted).map(p=>p.domain||'').filter(Boolean),accepted_actions:result.proposals.filter(p=>p.accepted).map(p=>p.action_id||'').filter(Boolean)};
+ return {round:result.round,year:result.year,axes:result.axes,proposals:result.proposals,interactions:[],trace:result.trace,domains:result.proposals.filter(p=>p.accepted).map(p=>p.domain||'').filter(Boolean),accepted_actions:result.proposals.filter(p=>p.accepted).map(p=>p.action_id||'').filter(Boolean)};
 }
 
 function publishScene(view:RoundView){
@@ -89,6 +89,17 @@ function render(result:SimulationResult,round=selectedRound){
   row.append(title,score,el('small','proposal-rationale',p.rationale));
   proposals.append(row);
  });
+ const interactions=clear('#interactions');
+ const stanceLabel={support:'支持',oppose:'反対',amend:'修正要求'} as const;
+ view.interactions.forEach(item=>{
+  const row=el('div','interaction');
+  row.append(
+   el('b','',`${item.responder_agent_id} → ${item.target_agent_id}: ${stanceLabel[item.stance]}`),
+   el('span','',`${item.initial_action} → ${item.final_action}（優先度 ${item.priority_delta>=0?'+':''}${item.priority_delta}、最終 ${item.final_priority}）`),
+   el('small','',item.rationale),
+  );
+  interactions.append(row);
+ });
  const axes=clear('#axes');
  view.axes.forEach(a=>{
   const row=el('div','axis'),bar=el('i');
@@ -109,7 +120,7 @@ function render(result:SimulationResult,round=selectedRound){
   b.setAttribute('aria-label',`${roundView.year}年、年次${roundNumber}の結果を表示`);
   b.setAttribute('aria-current',roundNumber===view.round?'step':'false');
   b.append(el('b','',String(roundView.year)),el('span','',`年次 ${roundNumber} · Plan→Do→Check→Act`));
-  b.addEventListener('click',()=>{window.clearTimeout(replayTimer);if(latest)render(latest,roundNumber)});
+  b.addEventListener('click',()=>{window.clearTimeout(replayTimer);document.querySelector('#status')!.textContent=`結果リプレイを停止・${roundView.year}年を表示`;if(latest)render(latest,roundNumber)});
   rounds.append(b);
  });
  publishScene(view);
