@@ -409,9 +409,18 @@ def test_cli_verify_accepts_canonical_core_random_draw_floats(tmp_path):
     assert completed.returncode == 0, completed.stderr
 
 
-def test_cli_verify_rejects_alternate_float_token_with_same_binary_value(tmp_path):
+@pytest.mark.parametrize(
+    "alternate",
+    (
+        "0.80604768638914149",
+        "0.80604768638914150",
+        "8.060476863891415e-1",
+    ),
+)
+def test_cli_verify_rejects_alternate_float_token_with_same_binary_value(
+    tmp_path, alternate
+):
     canonical = "0.8060476863891415"
-    alternate = "0.80604768638914149"
     assert float(canonical) == float(alternate)
     text = canonical_bundle_json(build_run_bundle(ROOT)).replace(
         f'"random_draw": {canonical}', f'"random_draw": {alternate}', 1
