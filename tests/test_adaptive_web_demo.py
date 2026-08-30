@@ -175,6 +175,24 @@ def test_displayed_trace_includes_saturation_records():
     joined = "\n".join(row for view in result["rounds"] for row in view["trace"])
     assert any(event["rule_id"] in joined for event in saturations)
     assert "attempted=" in joined and "applied=" in joined
+    for source, view in zip(
+        result["simulation"]["rounds"], result["rounds"], strict=True
+    ):
+        records_by_id = {
+            record["execution_record_id"]: record
+            for record in source["execution_records"]
+        }
+        for diagnostic in source["transition_saturations"]:
+            assert set(diagnostic) == {"rule_id", "execution_record_id"}
+            identity = web_demo._record_identity(
+                records_by_id[diagnostic["execution_record_id"]]
+            )
+            assert any(
+                row.startswith("SATURATION ")
+                and f'rule={diagnostic["rule_id"]}' in row
+                and identity in row
+                for row in view["trace"]
+            )
     for view in result["rounds"]:
         assert all(
             f'SATURATION year={view["year"]} ' in row

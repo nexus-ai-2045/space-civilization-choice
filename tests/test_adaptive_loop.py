@@ -1,6 +1,11 @@
+from copy import deepcopy
+
 import pytest
 
-from space_civilization.adaptive_loop import run_adaptive_simulation
+from space_civilization.adaptive_loop import (
+    _validate_execution_contract,
+    run_adaptive_simulation,
+)
 from space_civilization.parameter_registry import expand_preset
 from space_civilization.providers import DeterministicProposalProvider, derive_provenance_type
 
@@ -67,6 +72,15 @@ def test_execution_records_are_emitted_at_transition_point_and_reconcile_after()
     for round_item in result["rounds"]:
         cursor = dict(round_item["before"])
         kinds = [record["kind"] for record in round_item["execution_records"]]
+        record_ids = [
+            record["execution_record_id"]
+            for record in round_item["execution_records"]
+        ]
+        assert len(record_ids) == len(set(record_ids))
+        assert record_ids == [
+            f'{round_item["year"]}-E{index:02d}'
+            for index in range(1, len(record_ids) + 1)
+        ]
         assert kinds.count("feedback") == 1
         assert kinds.count("uncertainty") == 3
         assert "saturation" not in kinds
@@ -110,16 +124,52 @@ def test_execution_record_contract_covers_uncertainty_identity_and_all_clamps():
                 continue
             matches = [
                 diagnostic for diagnostic in round_item["transition_saturations"]
-                if diagnostic["execution_kind"] == record["kind"]
-                and diagnostic["axis"] == record["axis"]
-                and diagnostic["attempted_delta"] == record["attempted_delta"]
-                and diagnostic["applied_delta"] == record["applied_delta"]
+                if diagnostic["execution_record_id"]
+                == record["execution_record_id"]
             ]
             assert matches
+            assert set(matches[0]) == {"rule_id", "execution_record_id"}
             if record["kind"] == "uncertainty":
-                assert matches[0]["parameter_id"] == record["parameter_id"]
                 clamped_uncertainty_seen = True
     assert clamped_uncertainty_seen
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("missing_id", "duplicate_id", "dangling", "missing_diagnostic", "unclamped_diagnostic"),
+)
+def test_execution_record_reference_contract_rejects_invalid_graph(mutation):
+    records = [
+        {
+            "execution_record_id": "2026-E01",
+            "attempted_delta": -3,
+            "applied_delta": -1,
+        },
+        {
+            "execution_record_id": "2026-E02",
+            "attempted_delta": 1,
+            "applied_delta": 1,
+        },
+    ]
+    diagnostics = [
+        {"rule_id": "BOUND-UNCERTAINTY", "execution_record_id": "2026-E01"}
+    ]
+    records = deepcopy(records)
+    diagnostics = deepcopy(diagnostics)
+    if mutation == "missing_id":
+        records[0].pop("execution_record_id")
+    elif mutation == "duplicate_id":
+        records[1]["execution_record_id"] = "2026-E01"
+    elif mutation == "dangling":
+        diagnostics[0]["execution_record_id"] = "2026-E99"
+    elif mutation == "missing_diagnostic":
+        diagnostics.clear()
+    else:
+        diagnostics.append(
+            {"rule_id": "BOUND-ACTION", "execution_record_id": "2026-E02"}
+        )
+    with pytest.raises(ValueError):
+        _validate_execution_contract(records, diagnostics)
 
 
 def test_all_valid_parameter_boundaries_complete_with_explicit_saturation():

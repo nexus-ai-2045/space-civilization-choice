@@ -143,6 +143,14 @@ def _proposal_rows(round_item: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def _record_identity(record: dict[str, Any]) -> str:
+    if record["kind"] == "action":
+        return f'agent={record["agent_id"]} action={record["action_id"]}'
+    if record["kind"] == "uncertainty":
+        return f'parameter={record["parameter_id"]} rule={record["rule_id"]}'
+    return f'rule={record["rule_id"]}'
+
+
 def _trace_rows(
     records: list[dict[str, Any]],
     saturations: list[dict[str, Any]],
@@ -150,32 +158,28 @@ def _trace_rows(
     year: int,
 ) -> list[str]:
     rows: list[str] = []
+    records_by_id = {
+        record["execution_record_id"]: record for record in records
+    }
+    if len(records_by_id) != len(records):
+        raise ValueError("duplicate execution record ID in web projection")
     for record in records:
         prefix = record["kind"].upper()
-        identity = ""
-        if record["kind"] == "action":
-            identity = f' agent={record["agent_id"]} action={record["action_id"]}'
-        elif record["kind"] == "uncertainty":
-            identity = (
-                f' parameter={record["parameter_id"]} rule={record["rule_id"]}'
-            )
-        else:
-            identity = f' rule={record["rule_id"]}'
+        identity = _record_identity(record)
         rows.append(
-            f'{prefix} year={record["year"]}{identity} axis={record["axis"]} '
+            f'{prefix} year={record["year"]} {identity} axis={record["axis"]} '
             f'attempted={record["attempted_delta"]:+d} '
             f'applied={record["applied_delta"]:+d}'
         )
     for event in saturations:
-        parameter = (
-            f' parameter={event["parameter_id"]}'
-            if "parameter_id" in event
-            else ""
-        )
+        record = records_by_id.get(event.get("execution_record_id"))
+        if record is None:
+            raise ValueError("dangling saturation execution record ID")
         rows.append(
-            f'SATURATION year={year} rule={event["rule_id"]}{parameter} '
-            f'axis={event["axis"]} attempted={event["attempted_delta"]:+d} '
-            f'applied={event["applied_delta"]:+d}'
+            f'SATURATION year={year} rule={event["rule_id"]} '
+            f'{_record_identity(record)} axis={record["axis"]} '
+            f'attempted={record["attempted_delta"]:+d} '
+            f'applied={record["applied_delta"]:+d}'
         )
     return rows
 

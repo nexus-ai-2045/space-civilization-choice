@@ -65,6 +65,35 @@ def _bounded_transition(value: int) -> tuple[int, bool]:
     return bounded, bounded != value
 
 
+def _execution_record_id(year: int, index: int) -> str:
+    return f"{year}-E{index:02d}"
+
+
+def _validate_execution_contract(records: list[dict], saturations: list[dict]) -> None:
+    record_ids = [record.get("execution_record_id") for record in records]
+    if any(not isinstance(record_id, str) or not record_id for record_id in record_ids):
+        raise ValueError("execution record ID is missing")
+    if len(set(record_ids)) != len(record_ids):
+        raise ValueError("execution record IDs must be unique within a round")
+    if any(
+        set(item) != {"rule_id", "execution_record_id"}
+        for item in saturations
+    ):
+        raise ValueError("saturation diagnostic must only reference an execution record")
+    references = [item.get("execution_record_id") for item in saturations]
+    if any(reference not in set(record_ids) for reference in references):
+        raise ValueError("saturation diagnostic has a dangling execution record ID")
+    if len(references) != len(set(references)):
+        raise ValueError("execution record has duplicate saturation diagnostics")
+    clamped_ids = {
+        record["execution_record_id"]
+        for record in records
+        if record["attempted_delta"] != record["applied_delta"]
+    }
+    if set(references) != clamped_ids:
+        raise ValueError("execution clamp diagnostics are incomplete")
+
+
 def _apply_actions(
     axes: dict[str, int], accepted: list[dict], year: int
 ) -> tuple[dict[str, int], list[dict], list[dict]]:
@@ -77,6 +106,9 @@ def _apply_actions(
             result[axis], saturated = _bounded_transition(before + delta)
             records.append(
                 {
+                    "execution_record_id": _execution_record_id(
+                        year, len(records) + 1
+                    ),
                     "kind": "action",
                     "year": year,
                     "agent_id": item["agent_id"],
@@ -90,12 +122,7 @@ def _apply_actions(
                 saturations.append(
                     {
                         "rule_id": "BOUND-ACTION",
-                        "execution_kind": "action",
-                        "agent_id": item["agent_id"],
-                        "action_id": item["action_id"],
-                        "axis": axis,
-                        "attempted_delta": delta,
-                        "applied_delta": result[axis] - before,
+                        "execution_record_id": records[-1]["execution_record_id"],
                     }
                 )
     # Close the three-phase loop: visible outcomes feed legitimacy in every round.
@@ -106,6 +133,7 @@ def _apply_actions(
     result["public_legitimacy"], saturated = _bounded_transition(before_legitimacy + attempted_delta)
     records.append(
         {
+            "execution_record_id": _execution_record_id(year, len(records) + 1),
             "kind": "feedback",
             "year": year,
             "rule_id": "FEEDBACK-LEGITIMACY",
@@ -118,17 +146,14 @@ def _apply_actions(
         saturations.append(
             {
                 "rule_id": "BOUND-FEEDBACK",
-                "execution_kind": "feedback",
-                "axis": "public_legitimacy",
-                "attempted_delta": attempted_delta,
-                "applied_delta": result["public_legitimacy"] - before_legitimacy,
+                "execution_record_id": records[-1]["execution_record_id"],
             }
         )
     return result, saturations, records
 
 
 def _apply_uncertainty(
-    axes: dict[str, int], parameters: dict[str, int], year: int
+    axes: dict[str, int], parameters: dict[str, int], year: int, start_index: int
 ) -> tuple[dict[str, int], list[dict], list[dict]]:
     """Three bounded external uncertainties produce explicit, traceable shocks."""
     result = deepcopy(axes)
@@ -149,6 +174,9 @@ def _apply_uncertainty(
         events.append({"parameter_id": parameter_id, "axis": axis, "delta": result[axis] - before, "attempted_delta": delta, "saturated": saturated, "rule_id": rule_id})
         records.append(
             {
+                "execution_record_id": _execution_record_id(
+                    year, start_index + len(records)
+                ),
                 "kind": "uncertainty",
                 "year": year,
                 "parameter_id": parameter_id,
@@ -162,12 +190,7 @@ def _apply_uncertainty(
             saturations.append(
                 {
                     "rule_id": "BOUND-UNCERTAINTY",
-                    "source_rule_id": rule_id,
-                    "execution_kind": "uncertainty",
-                    "parameter_id": parameter_id,
-                    "axis": axis,
-                    "attempted_delta": delta,
-                    "applied_delta": result[axis] - before,
+                    "execution_record_id": records[-1]["execution_record_id"],
                 }
             )
     return result, events, records, saturations
@@ -257,9 +280,10 @@ def run_adaptive_simulation(
             uncertainty_events,
             uncertainty_records,
             uncertainty_saturations,
-        ) = _apply_uncertainty(axes, checked, year)
+        ) = _apply_uncertainty(axes, checked, year, len(action_records) + 1)
         transition_saturations.extend(uncertainty_saturations)
         execution_records = action_records + uncertainty_records
+        _validate_execution_contract(execution_records, transition_saturations)
         item = {
             "year": year, "pdca": ["plan", "do", "check", "act"], "before": before,
             "proposals": proposals, "accepted_actions": accepted, "resources_available": resources,
