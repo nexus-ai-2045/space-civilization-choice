@@ -568,6 +568,20 @@ def test_fixture_loader_rejects_depth_that_fails_during_serialization(
         load_strict_fixture_json(path)
 
 
+def test_fixture_loader_rejects_depth_before_downstream_deepcopy(tmp_path):
+    nested: dict = {}
+    for _ in range(300):
+        nested = {"child": nested}
+    payload = json.loads(
+        (ROOT / FIXTURE_ALLOWLIST["domestic_autonomy"]).read_text(encoding="utf-8")
+    )
+    payload["initial_state"]["accepted_extra"] = nested
+    path = tmp_path / "deep-but-parseable-fixture.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="fixture JSON nesting is too deep"):
+        load_strict_fixture_json(path)
+
+
 @pytest.mark.parametrize(
     "rounds",
     (None, 1, True, {}, [None], [{}]),

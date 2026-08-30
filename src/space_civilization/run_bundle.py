@@ -13,6 +13,7 @@ from .simulation import canonical_json, sha256_json, validate_fixture
 
 BUNDLE_SCHEMA = "meta-security-run-bundle/v1"
 ZERO_HASH = "0" * 64
+MAX_JSON_NESTING = 128
 FIXTURE_ALLOWLIST = {
     "international_integration": "fixtures/phase1_international_cooperation.json",
     "domestic_autonomy": "fixtures/phase1_domestic_autonomy.json",
@@ -83,6 +84,19 @@ def _without_insignificant_json_whitespace(text: str) -> str:
     return "".join(compact)
 
 
+def _reject_excessive_json_nesting(value: Any, *, label: str) -> None:
+    """後段のcopy/hash処理が安全に扱えるJSONネスト深度へ制限する。"""
+    stack: list[tuple[Any, int]] = [(value, 0)]
+    while stack:
+        current, depth = stack.pop()
+        if depth > MAX_JSON_NESTING:
+            raise ValueError(f"{label} JSON nesting is too deep")
+        if isinstance(current, dict):
+            stack.extend((item, depth + 1) for item in current.values())
+        elif isinstance(current, list):
+            stack.extend((item, depth + 1) for item in current)
+
+
 def load_strict_json(path: str | Path) -> Any:
     """bundle JSONを重複キー・非有限数なしで一度だけ読み込む。"""
     text = Path(path).read_text(encoding="utf-8")
@@ -101,6 +115,7 @@ def load_strict_json(path: str | Path) -> Any:
             separators=(",", ":"),
             allow_nan=False,
         )
+        _reject_excessive_json_nesting(parsed, label="bundle")
     except RecursionError as error:
         raise ValueError("bundle JSON nesting is too deep") from error
     if _without_insignificant_json_whitespace(text) != canonical:
@@ -121,6 +136,7 @@ def load_strict_fixture_json(path: str | Path) -> Any:
         # Parserの再帰上限内でも、後段のcanonical serializationが処理できない
         # 深さを持つ入力は、この信頼境界で拒否する。
         json.dumps(parsed, ensure_ascii=False, allow_nan=False)
+        _reject_excessive_json_nesting(parsed, label="fixture")
         return parsed
     except RecursionError as error:
         raise ValueError("fixture JSON nesting is too deep") from error
