@@ -566,3 +566,20 @@ def test_fixture_loader_rejects_depth_that_fails_during_serialization(
     monkeypatch.setattr("space_civilization.run_bundle.json.dumps", fake_dumps)
     with pytest.raises(ValueError, match="fixture JSON nesting is too deep"):
         load_strict_fixture_json(path)
+
+
+@pytest.mark.parametrize(
+    "rounds",
+    (None, 1, True, {}, [None], [{}]),
+)
+def test_malformed_rounds_keep_the_value_error_contract(tmp_path, rounds):
+    for ref in FIXTURE_ALLOWLIST.values():
+        target = tmp_path / ref
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / ref, target)
+    fixture = tmp_path / FIXTURE_ALLOWLIST["domestic_autonomy"]
+    payload = json.loads(fixture.read_text(encoding="utf-8"))
+    payload["rounds"] = rounds
+    fixture.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError):
+        build_run_bundle(tmp_path)

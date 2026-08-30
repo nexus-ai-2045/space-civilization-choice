@@ -126,6 +126,17 @@ def load_strict_fixture_json(path: str | Path) -> Any:
         raise ValueError("fixture JSON nesting is too deep") from error
 
 
+def _require_fixture_agents_object(fixture: dict[str, Any]) -> dict[str, Any]:
+    """既存fixture validatorより先にagents containerの型だけを安全に検査する。"""
+    initial_state = fixture.get("initial_state")
+    if not isinstance(initial_state, dict):
+        raise ValueError("fixture initial_state must be a JSON object")
+    agents = initial_state.get("agents")
+    if not isinstance(agents, dict):
+        raise ValueError("fixture agents must be a JSON object")
+    return agents
+
+
 def _fixture_shared_contract(fixture: dict[str, Any]) -> dict[str, Any]:
     scenario_snapshot_id = fixture.get("scenario_snapshot_id")
     model_version = fixture.get("model_version")
@@ -136,12 +147,8 @@ def _fixture_shared_contract(fixture: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("fixture model_version must be a non-empty string")
     if type(seed) is not int:
         raise ValueError("fixture seed must be a strict integer")
-    initial_state = fixture.get("initial_state")
-    if not isinstance(initial_state, dict):
-        raise ValueError("fixture initial_state must be a JSON object")
-    agents = initial_state.get("agents")
-    if not isinstance(agents, dict):
-        raise ValueError("fixture agents must be a JSON object")
+    initial_state = fixture["initial_state"]
+    agents = _require_fixture_agents_object(fixture)
     if any(
         not isinstance(agent, dict) or type(agent.get("capacity")) is not int
         for agent in agents.values()
@@ -195,8 +202,9 @@ def build_run_bundle(
         fixture = load_strict_fixture_json(paths[branch])
         if not isinstance(fixture, dict):
             raise ValueError("fixture must be a JSON object")
-        _fixture_shared_contract(fixture)
+        _require_fixture_agents_object(fixture)
         validate_fixture(fixture, allow_hackathon_demo_branches=True)
+        _fixture_shared_contract(fixture)
         fixtures[branch] = fixture
     shared_contract_hashes = {
         sha256_json(_fixture_shared_contract(fixtures[branch])) for branch in BRANCHES
