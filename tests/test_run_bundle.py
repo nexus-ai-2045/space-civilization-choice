@@ -209,6 +209,47 @@ def test_generation_and_verification_reject_duplicate_fixture_keys(tmp_path):
         verify_run_bundle(bundle, tmp_path)
 
 
+@pytest.mark.parametrize("constant", ("NaN", "Infinity", "-Infinity"))
+def test_generation_and_verification_reject_nonfinite_fixture_numbers(
+    tmp_path, constant
+):
+    for ref in FIXTURE_ALLOWLIST.values():
+        target = tmp_path / ref
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / ref, target)
+    fixture = tmp_path / FIXTURE_ALLOWLIST["domestic_autonomy"]
+    original = fixture.read_text(encoding="utf-8")
+    fixture.write_text(
+        original.replace('"public_legitimacy": 50', f'"public_legitimacy": {constant}', 1),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="non-finite JSON number"):
+        build_run_bundle(tmp_path)
+
+    bundle = build_run_bundle(ROOT)
+    with pytest.raises(ValueError, match="non-finite JSON number"):
+        verify_run_bundle(bundle, tmp_path)
+
+
+def test_generation_rejects_python_equal_but_noncanonical_shared_snapshot(tmp_path):
+    for ref in FIXTURE_ALLOWLIST.values():
+        target = tmp_path / ref
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / ref, target)
+    fixture = tmp_path / FIXTURE_ALLOWLIST["domestic_autonomy"]
+    original = fixture.read_text(encoding="utf-8")
+    fixture.write_text(
+        original.replace(
+            '"policy_allocator": {"capacity": 50}',
+            '"policy_allocator": {"capacity": 50.0}',
+            1,
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="canonical scenario snapshot hash"):
+        build_run_bundle(tmp_path)
+
+
 @pytest.mark.parametrize(
     "ref",
     ("../outside.json", "/absolute.json", "fixtures/not-allowlisted.json"),
@@ -261,3 +302,20 @@ def test_cli_verify_rejects_duplicate_json_keys(tmp_path, location):
     )
     assert completed.returncode != 0
     assert "duplicate JSON key" in completed.stderr
+
+
+@pytest.mark.parametrize("constant", ("NaN", "Infinity", "-Infinity"))
+def test_cli_verify_rejects_nonfinite_bundle_numbers(tmp_path, constant):
+    text = canonical_bundle_json(build_run_bundle(ROOT)).replace(
+        '"sequence": 1,', f'"sequence": {constant},', 1
+    )
+    path = tmp_path / f"nonfinite-{constant}.json"
+    path.write_text(text, encoding="utf-8")
+    completed = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/run_bundle.py"), "--verify", str(path)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode != 0
+    assert "non-finite JSON number" in completed.stderr

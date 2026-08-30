@@ -29,11 +29,17 @@ def reject_duplicate_json_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
+def reject_nonfinite_json_constant(value: str) -> Any:
+    """JSON仕様外のNaNおよびInfinityを拒否する。"""
+    raise ValueError(f"non-finite JSON number: {value}")
+
+
 def load_strict_json(path: str | Path) -> Any:
     """重複キーを許さず、ファイルを一度だけ読み込む。"""
     return json.loads(
         Path(path).read_text(encoding="utf-8"),
         object_pairs_hook=reject_duplicate_json_pairs,
+        parse_constant=reject_nonfinite_json_constant,
     )
 
 
@@ -76,6 +82,13 @@ def build_run_bundle(
         validate_fixture(fixture, allow_hackathon_demo_branches=True)
         fixtures[branch] = fixture
     comparison = compare_simulations(fixtures)
+    scenario_snapshot_hashes = {
+        comparison["branches"][branch]["manifest"]["scenario_snapshot_hash"]
+        for branch in BRANCHES
+    }
+    if len(scenario_snapshot_hashes) != 1:
+        raise ValueError("branch manifests must share one canonical scenario snapshot hash")
+    scenario_snapshot_hash = scenario_snapshot_hashes.pop()
     request_content = {
         "schema": "meta-security-run-request/v1",
         "seed": comparison["seed"],
@@ -128,7 +141,7 @@ def build_run_bundle(
     evidence = {
         "schema": "meta-security-evidence/v1",
         "run_id": run_id,
-        "scenario_snapshot_hash": comparison["branches"][BRANCHES[0]]["manifest"]["scenario_snapshot_hash"],
+        "scenario_snapshot_hash": scenario_snapshot_hash,
         "exogenous_event_stream_hash": comparison["exogenous_event_stream_hash"],
         "event_stream_head_hash": previous_hash,
         "event_count": len(records),
