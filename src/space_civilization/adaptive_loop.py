@@ -158,7 +158,11 @@ def _apply_actions(
     physical_signal = result["access_and_operation"] - axes["access_and_operation"]
     organizational_signal = result["industrial_reproduction"] - axes["industrial_reproduction"]
     before_legitimacy = result["public_legitimacy"]
-    attempted_delta = (physical_signal + organizational_signal) // 3
+    feedback_key = ("__core__", "FEEDBACK-LEGITIMACY", "public_legitimacy")
+    feedback_carry_before = carry.get(feedback_key, 0)
+    feedback_numerator = physical_signal + organizational_signal + feedback_carry_before
+    attempted_delta = _truncate_toward_zero(feedback_numerator, 3)
+    carry[feedback_key] = feedback_numerator - attempted_delta * 3
     result["public_legitimacy"], saturated = _bounded_transition(before_legitimacy + attempted_delta)
     records.append(
         {
@@ -169,6 +173,8 @@ def _apply_actions(
             "axis": "public_legitimacy",
             "attempted_delta": attempted_delta,
             "applied_delta": result["public_legitimacy"] - before_legitimacy,
+            "carry_before": feedback_carry_before,
+            "carry_after": carry[feedback_key],
         }
     )
     if saturated:

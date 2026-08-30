@@ -98,6 +98,26 @@ def test_http_rejects_unknown_request_fields():
         server.server_close()
 
 
+def test_fallback_batch_route_preserves_four_round_contract(monkeypatch):
+    monkeypatch.setattr(web_demo, "adaptive_frontend_available", lambda: False)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DemoHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.server_port}/api/simulate",
+            data=json.dumps({"rounds": 4}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:
+            assert response.status == 200
+            assert len(json.load(response)["branches"]) == 3
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_http_rejects_explicit_empty_parameter_object():
     server = ThreadingHTTPServer(("127.0.0.1", 0), DemoHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -330,6 +350,7 @@ def test_adaptive_ui_exposes_replay_hash_and_full_pdca_round_labels():
     assert "年ごと完全PDCA" in source
     assert "AbortController" in source
     assert "reader.cancel()" in source
+    assert "setInterval" not in source
     assert "主体間の応答と再提案" in source
     assert "結果リプレイを停止" in source
     responsive = (web_demo.REPO_ROOT / "frontend/src/responsive.css").read_text(encoding="utf-8")

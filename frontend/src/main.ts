@@ -133,9 +133,7 @@ async function runSimulation(){
  const generation=++runGeneration;
  window.clearTimeout(replayTimer);
  const s=document.querySelector('#status')!;
- const started=performance.now();
  s.textContent='5主体が15年分を計算中…';
- const elapsedTimer=window.setInterval(()=>{if(generation===runGeneration)s.textContent=`5主体が15年分を計算中… ${((performance.now()-started)/1000).toFixed(1)}秒`;},250);
  params=normalizeAllocations(params);
  syncControlLabels();
  try{
@@ -178,7 +176,7 @@ async function runSimulation(){
   if(generation!==runGeneration)return;
   if(error instanceof DOMException&&error.name==='AbortError')return;
   s.textContent=`実行失敗: ${error instanceof Error?error.message:'unknown'}`;
- }finally{window.clearInterval(elapsedTimer);if(activeRun===controller)activeRun=undefined}
+ }finally{if(activeRun===controller)activeRun=undefined}
 }
 
 document.querySelector('#run')!.addEventListener('click',runSimulation);

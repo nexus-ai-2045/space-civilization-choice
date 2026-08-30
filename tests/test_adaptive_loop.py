@@ -68,7 +68,32 @@ def test_action_carry_is_scoped_to_agent_action_and_axis_for_trace_attribution()
     assert set(carry) == {
         ("agent-a", "action-a", "access_and_operation"),
         ("agent-b", "action-b", "access_and_operation"),
+        ("__core__", "FEEDBACK-LEGITIMACY", "public_legitimacy"),
     }
+
+
+def test_feedback_carry_preserves_annualized_three_phase_remainders():
+    axes = {
+        "access_and_operation": 50,
+        "industrial_reproduction": 50,
+        "rule_shaping": 50,
+        "knowledge_continuity": 50,
+        "relationship_optionality": 50,
+        "public_legitimacy": 50,
+    }
+    carry = {}
+    accepted = [{
+        "agent_id": "agent-a",
+        "action_id": "action-a",
+        "effects": {"access_and_operation": 4, "industrial_reproduction": 4},
+    }]
+    first, _, first_records = _apply_actions(axes, accepted, 2026, carry)
+    second, _, second_records = _apply_actions(first, accepted, 2027, carry)
+    first_feedback = next(record for record in first_records if record["kind"] == "feedback")
+    second_feedback = next(record for record in second_records if record["kind"] == "feedback")
+    assert first_feedback["carry_after"] == 2
+    assert second_feedback["carry_before"] == 2
+    assert first_feedback["attempted_delta"] + second_feedback["attempted_delta"] == 1
 
 
 def test_progress_events_are_ordered_and_end_with_completion():

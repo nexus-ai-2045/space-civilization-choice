@@ -14,6 +14,7 @@ from .parameter_registry import ParameterError, expand_preset, validate_paramete
 from .simulation import (
     PHASE1_ALLOWED_ACTIONS,
     PHASE1_TRANSITION_RULES,
+    ROUNDS,
     load_fixture,
     replace_action_effect,
     sha256_json,
@@ -272,8 +273,13 @@ class DemoHandler(SimpleHTTPRequestHandler):
             request_body = json.loads(raw.decode("utf-8"))
             if not isinstance(request_body, dict) or set(request_body) - {"parameters", "rounds", "seed"}:
                 raise ParameterError("request object contains unknown fields")
-            if request_body.get("rounds", len(ADAPTIVE_YEARS)) != len(ADAPTIVE_YEARS):
-                raise ParameterError(f"rounds must be {len(ADAPTIVE_YEARS)}")
+            expected_rounds = (
+                len(ADAPTIVE_YEARS)
+                if self.path == "/api/simulate/stream" or self._adaptive_ui
+                else len(ROUNDS)
+            )
+            if request_body.get("rounds", expected_rounds) != expected_rounds:
+                raise ParameterError(f"rounds must be {expected_rounds}")
             seed_supplied = "seed" in request_body
             seed = request_body.get("seed", 20260829)
             if type(seed) is not int:
