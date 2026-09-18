@@ -621,3 +621,69 @@ def test_nonobject_axis_containers_keep_the_value_error_contract(
     fixture.write_text(json.dumps(payload), encoding="utf-8")
     with pytest.raises(ValueError):
         build_run_bundle(tmp_path)
+
+
+def test_bundle_values_match_sources_derived_independently_of_the_builder():
+    """verify_run_bundle は build_run_bundle 自身と比較するため、builder の誤りは自己整合して通る。
+
+    ここでは builder を経由せず fixture と compare_simulations から期待値を導き、
+    各 section の値そのものを固定する。
+    """
+    bundle = build_run_bundle(ROOT)
+    raw_fixtures = {
+        branch: json.loads((ROOT / FIXTURE_ALLOWLIST[branch]).read_text(encoding="utf-8"))
+        for branch in BRANCHES
+    }
+    comparison = compare_simulations(
+        {branch: ROOT / FIXTURE_ALLOWLIST[branch] for branch in BRANCHES}
+    )
+
+    request = bundle["run_request"]
+    assert {fixture["seed"] for fixture in raw_fixtures.values()} == {request["seed"]}
+    assert request["model_version"] == comparison["model_version"]
+    assert request["fixtures"] == [
+        {
+            "branch": branch,
+            "ref": FIXTURE_ALLOWLIST[branch],
+            "sha256": sha256_json(raw_fixtures[branch]),
+        }
+        for branch in BRANCHES
+    ]
+
+    assert bundle["replay"]["comparison_hash"] == comparison["comparison_hash"]
+    assert bundle["replay"]["branches"] == [
+        {
+            "branch": branch,
+            "event_log_hash": comparison["branches"][branch]["event_log_hash"],
+            "canonical_output_hash": comparison["branches"][branch]["canonical_output_hash"],
+        }
+        for branch in BRANCHES
+    ]
+
+    snapshot_hashes = {
+        comparison["branches"][branch]["manifest"]["scenario_snapshot_hash"]
+        for branch in BRANCHES
+    }
+    assert snapshot_hashes == {bundle["evidence"]["scenario_snapshot_hash"]}
+    assert (
+        bundle["evidence"]["exogenous_event_stream_hash"]
+        == comparison["exogenous_event_stream_hash"]
+    )
+    assert (
+        bundle["evidence"]["scenario_snapshot_hash"]
+        != bundle["evidence"]["exogenous_event_stream_hash"]
+    )
+
+
+def test_canonical_bundle_bytes_are_identical_across_platforms():
+    """同じ fixture からは OS・Python 実装に依らず同一 byte 列が出る。CI の両 OS でこの値を照合する。
+
+    fixture / model を意図して変えた時だけ更新する。更新値は
+    `python scripts/run_bundle.py <out>` の出力 file の sha256。
+    """
+    import hashlib
+
+    digest = hashlib.sha256(
+        canonical_bundle_json(build_run_bundle(ROOT)).encode("utf-8")
+    ).hexdigest()
+    assert digest == "a67b899930eb1edb47bc8820e1e08dc83f8ad9bb377da551d9bb8c62997e1876"
