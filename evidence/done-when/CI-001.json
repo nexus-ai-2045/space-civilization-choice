@@ -1,0 +1,25 @@
+{
+  "artifact_sha256": {
+    "ci_receipt": "6b1cd4b73e37b61ac07f6a71edd6454ebcee2cb78a382f01a4d3cfcc0edd0b21",
+    "workflow": "f1a284a5ba2a4539a24d2dc5389b6951c3e279c19a8f813769e3baf5c2004f54"
+  },
+  "artifacts": {
+    "ci_receipt": "evidence/ci/phase1-exact-head-ecde21d.json",
+    "workflow": ".github/workflows/ai-ratchet-gate.yml"
+  },
+  "done_when_id": "CI-001",
+  "evidence_type": "exact_head_ci",
+  "result": {
+    "conclusion": "success",
+    "head_sha": "ecde21de55e0114208345d8070daac7b531574c1",
+    "required_jobs": [
+      "goal-contract",
+      "secret-scan",
+      "ratchet (ubuntu-latest)",
+      "ratchet (windows-latest)"
+    ],
+    "run_url": "https://github.com/nexus-ai-2045/space-civilization-choice/actions/runs/33217277017"
+  },
+  "schema": "space_civilization_done_when_evidence.v1",
+  "status": "passed"
+}

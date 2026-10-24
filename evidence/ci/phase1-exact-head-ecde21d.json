@@ -1,0 +1,13 @@
+{
+  "conclusion": "success",
+  "head_sha": "ecde21de55e0114208345d8070daac7b531574c1",
+  "jobs": {
+    "goal-contract": "success",
+    "ratchet (ubuntu-latest)": "success",
+    "ratchet (windows-latest)": "success",
+    "secret-scan": "success"
+  },
+  "repository": "nexus-ai-2045/space-civilization-choice",
+  "run_url": "https://github.com/nexus-ai-2045/space-civilization-choice/actions/runs/33217277017",
+  "schema": "space_civilization_ci_receipt.v1"
+}

@@ -1,0 +1,7 @@
+# ゴール契約とCI境界は、通常の文書変更より強いレビュー対象にする。
+/.github/workflows/ @nexus-ai-2045
+/.github/CODEOWNERS @nexus-ai-2045
+/scripts/check_project_goal.py @nexus-ai-2045
+/tests/test_project_goal_contract.py @nexus-ai-2045
+/PROJECT_GOAL.md @nexus-ai-2045
+/docs/adr/ @nexus-ai-2045

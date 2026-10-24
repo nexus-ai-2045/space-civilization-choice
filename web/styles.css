@@ -1,0 +1,13 @@
+:root { color-scheme: dark; font-family: system-ui, sans-serif; background:#07111f; color:#e9f2ff; }
+body { margin:0; background:radial-gradient(circle at top,#173253,#07111f 55%); min-height:100vh; }
+main { max-width:1200px; margin:auto; padding:4rem 1.25rem; }
+.eyebrow { color:#65d9ff; letter-spacing:.18em; font-weight:700; }
+h1 { max-width:850px; font-size:clamp(2rem,5vw,4rem); line-height:1.08; margin:.25rem 0 1rem; }
+button { background:#65d9ff; color:#04101c; border:0; border-radius:999px; padding:.9rem 1.4rem; font-weight:800; cursor:pointer; }
+.grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; margin-top:1.5rem; }
+article, #summary, details { background:#0d2035dd; border:1px solid #294c6e; border-radius:16px; padding:1.1rem; }
+.proposal { min-height:5rem; color:#bdeeff; }
+.axis { display:grid; grid-template-columns:1.3fr 1fr 2rem; align-items:center; gap:.5rem; margin:.7rem 0; font-size:.86rem; }
+meter { width:100%; accent-color:#65d9ff; }
+details { margin-top:1rem; } pre { white-space:pre-wrap; overflow-wrap:anywhere; }
+@media (max-width:800px) { .grid { grid-template-columns:1fr; } main { padding-top:2rem; } }

@@ -1,0 +1,50 @@
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+@media (max-width: 720px) {
+  main,
+  .stage,
+  #game {
+    overflow: hidden;
+  }
+
+  main {
+    width: 100vw;
+  }
+
+  .stage {
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    min-width: 0;
+  }
+
+  .timeline {
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-inline: contain;
+  }
+
+  .timeline #rounds {
+    width: max-content;
+    max-width: none;
+  }
+
+  .round {
+    flex: 0 0 58px;
+    width: 58px;
+    min-width: 58px;
+  }
+
+  .round span {
+    white-space: nowrap;
+  }
+
+  .legend {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
