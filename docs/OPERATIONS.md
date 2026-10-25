@@ -95,7 +95,7 @@ drift確認と回帰検査を通してから採用する。
 - GitHub Ops: `operator_gate`。review済み上流revisionはmanifestへ記録し、外部writeごとに実行版をreceiptへ残す
 - repo-preflight: `operator_gate`。intentごとに再実行する
 - worktree lifecycle: `operator_gate`。read-only棚卸しでありcleanup権限ではない
-- ai-ratchet-gate: `enforced_ci`。release `v0.1.1`とwheel SHA-256をworkflow固定
+- ai-ratchet-gate: `enforced_ci`。release `v0.2.0`とwheel SHA-256をworkflow固定
 - FDEとengineering-brain: `design_reference`。runtime保証ではない
 - write preflight: PUBLIC repoへのpush / PR / settings変更は人間レビュー必須
 - external mutation: 本運用契約の作成時点ではpush、PR、merge、settings変更なし

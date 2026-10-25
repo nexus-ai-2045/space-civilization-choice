@@ -22,7 +22,7 @@
 - [x] required checksをGitHub Actions app ID `15368`へ固定
 - [x] force pushとbranch deletionを禁止
 - [x] README、LICENSE、SECURITY.md、CONTRIBUTING.mdあり
-- [x] `ai-ratchet-gate` release `v0.1.1`とwheel SHA-256をworkflow固定
+- [x] `ai-ratchet-gate` release `v0.2.0`とwheel SHA-256をworkflow固定
 - [x] 公開基盤はURLとreview済みrevisionだけを参照し、コード・画像・文書本文を複製しない
 - [x] 非公開基盤は一般化した契約だけを採り、repository URLとrevisionをmanifestへ収録しない
 - [x] FDEとengineering-brainは`design_reference`でありruntime保証ではない
