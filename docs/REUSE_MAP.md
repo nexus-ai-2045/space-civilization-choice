@@ -15,7 +15,7 @@
 | [github-ops-skills](https://github.com/nexus-ai-2045/github-ops-skills) | `operator_gate` | remote、identity、visibility、承認境界、write後read-back | [`3a6688c`](https://github.com/nexus-ai-2045/github-ops-skills/commit/3a6688c5d9d4234317947d0358127949e6b718a1) |
 | [worktree-lifecycle-control](https://github.com/nexus-ai-2045/worktree-lifecycle-control) | `operator_gate` | worktreeを統合証跡のある作業資産として扱うread-only棚卸し | [`3f5f035`](https://github.com/nexus-ai-2045/worktree-lifecycle-control/commit/3f5f035a8f017503865a44a6fa57ac099d95cb12) |
 | [repo-preflight](https://github.com/nexus-ai-2045/repo-preflight) | `operator_gate` | push、PR、merge、公開前のfail-closed検査 | [`35a06cc`](https://github.com/nexus-ai-2045/repo-preflight/commit/35a06cc4264423951195c54ae057d82fff360c8f) |
-| [ai-ratchet-gate](https://github.com/nexus-ai-2045/ai-ratchet-gate) | `enforced_ci` | trackedかつignoredの新規矛盾をrequired CI contextで拒否 | release `v0.1.1`とwheel SHA-256をworkflowで固定 |
+| [ai-ratchet-gate](https://github.com/nexus-ai-2045/ai-ratchet-gate) | `enforced_ci` | trackedかつignoredの新規矛盾をrequired CI contextで拒否 | release `v0.2.0`とwheel SHA-256をworkflowで固定 |
 | [note-publishing-suite](https://github.com/nexus-ai-2045/note-publishing-suite) | `out_of_scope` | Note記事の人間承認付き公開運用 | simulation productには接続しない |
 
 本repoでFDEはFractal Decision Ecosystemを指す。宇宙・航法分野のFault Detection and Exclusionとは
@@ -50,7 +50,7 @@
 | GitHub Ops | [`OPERATIONS.md`](OPERATIONS.md)、[`PUBLIC_READY.md`](../PUBLIC_READY.md) | 外部writeごとのoperator receiptが必要 |
 | worktree lifecycle | [`OPERATIONS.md`](OPERATIONS.md) | read-only棚卸し。cleanup権限ではない |
 | repo preflight | [`PREFLIGHT.md`](../PREFLIGHT.md)、[`OPERATIONS.md`](OPERATIONS.md) | intentごとのoperator gate。passは承認ではない |
-| ratchet | [workflow](../.github/workflows/ai-ratchet-gate.yml)、[baseline](../.ai-ratchet-gate/baseline.txt) | `v0.1.1` artifactをhash固定しrequired CIで実行 |
+| ratchet | [workflow](../.github/workflows/ai-ratchet-gate.yml)、[baseline](../.ai-ratchet-gate/baseline.txt) | `v0.2.0` artifactをhash固定しrequired CIで実行 |
 | 採用level整合 | [manifest](../ops/adoption-manifest.json)、[checker](../scripts/check_operational_adoption.py) | 既存required `goal-contract` jobで検査 |
 
 ## 既知の停止線

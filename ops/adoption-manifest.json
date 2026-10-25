@@ -65,8 +65,8 @@
       "source_visibility": "public",
       "repository_url": "https://github.com/nexus-ai-2045/ai-ratchet-gate",
       "adoption_level": "enforced_ci",
-      "release": "v0.1.1",
-      "artifact_sha256": "b3f22ab772699d57906326e42189e0ab7a0ee9e33dcad55a90909ece35106cd7",
+      "release": "v0.2.0",
+      "artifact_sha256": "95ebac0afbf91e1d4b3634b011680eeae58a85dc32e801b3bcbb7cfc41a0d4a8",
       "contract": "trackedかつignoredの新規矛盾をrequired CI contextで拒否する",
       "evidence_paths": [".github/workflows/ai-ratchet-gate.yml", ".ai-ratchet-gate/baseline.txt"],
       "drift_policy": "releaseとhashを固定し、baseline更新は人間レビューを要する"
