@@ -6,7 +6,7 @@ import json
 import subprocess
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1515,9 +1515,9 @@ class ProjectGoalContractTest(unittest.TestCase):
             repo = Path(directory)
             subprocess.run(["git", "init", "-q", str(repo)], check=True)
             evidence = repo / "evidence.md"
-            windows_path = "\\".join(("C:", "Users", "alice", "secret.txt"))
-            mac_path = "/".join(("", "Users", "alice", "private.txt"))
-            linux_path = "/".join(("", "home", "alice", "private.txt"))
+            windows_path = str(PureWindowsPath('C:\\', 'Users', 'alice', 'secret.txt'))
+            mac_path = str(PurePosixPath('/', 'Users', 'alice', 'private.txt'))
+            linux_path = str(PurePosixPath('/', 'home', 'alice', 'private.txt'))
             evidence.write_text(
                 f"windows: {windows_path}\n"
                 f"mac: {mac_path}\n"
